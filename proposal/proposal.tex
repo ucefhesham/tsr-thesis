@@ -1,0 +1,230 @@
+\documentclass[10pt,a4paper,oneside]{scrartcl}
+
+%\usepackage[ngerman]{babel}   % Deutsches Proposal
+\usepackage[USenglish]{babel} % English proposal
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref,xcolor,microtype,ifthen}
+
+\setkomafont{disposition}{}
+\setkomafont{descriptionlabel}{\bfseries}
+
+\usepackage[textwidth=450pt]{geometry}
+
+\usepackage[style=ieee,hyperref,natbib]{biblatex}
+
+\usepackage{graphicx}
+
+\bibliography{references}
+
+% Kommentare abschalten
+% Disable the hints here
+\newboolean{showhints}
+\setboolean{showhints}{true}
+% \setboolean{showhints}{false}
+
+\newcommand\hint[2]{
+\ifthenelse{\boolean{showhints}}{
+\begin{center}
+\colorbox{black!10}{
+\begin{minipage}{.963\textwidth}
+#2\hfill\textbf{#1}
+\end{minipage}
+}\end{center}}{}
+}
+
+%Title of the proposal
+\title{\iflanguage{ngerman}{Titel der Arbeit}{Title of the Thesis}}
+%bachelor or master?
+\subtitle{\iflanguage{ngerman}{(Bachelorarbeit / Masterarbeit)}{Bachelor/Master
+Thesis} Proposal}
+%first and then last name
+\author{\iflanguage{ngerman}{Vorname Nachname}{Firstname Lastname}}
+
+\begin{document}
+
+\maketitle
+
+\section{Motivation}
+\label{sec:motivation}
+
+\subsection{\iflanguage{ngerman}
+	{Forschungsgebiet}
+	{Research field}}
+\label{sub:field}
+\iflanguage{ngerman}
+        {\hint{(diese Seite)}{Allgemeines Forschungsgebiet (z.B. VANETs, IMD, Simulation) in dem die Arbeit eingeordnet ist einleiten, Charakteristika und Anwendungsgebiete aufzeigen und, wo sinnvoll, einführende Literatur zitieren.}}
+{\hint{(this page)}{General description of the research field (for example, VANETs, IMD, Simulation), discussing characteristics and applications, including some introductory literature as appropriate.}}
+
+\dots
+
+\subsection{\iflanguage{ngerman}
+	{Bereich der Arbeit}
+	{Thesis area}}
+\label{sub:topic}
+
+\iflanguage{ngerman}
+{\hint{(0,5 Seiten)}{Spezielles Themengebiet der Arbeit (z.B. Kommunikationsprotokolle, Sicherheit, Privacy, Missbrauchserkennung) in das Forschungsgebiet einordnen, Fragestellungen aufzeigen. Hier sollen auch mögliche Anforderungen und Ziele für das Ergebnis der eigenen Arbeit diskutiert werden (z.B. notwendige Effizienz).}}
+{\hint{(Half a Page)}{Introduce the specific topic of the work here (e.g., Communication protocols, security, privacy, misbehavior detection) and describe the requirements and goals of the work, such as the required efficiency.}}
+
+\dots
+
+
+\section{\iflanguage{ngerman}
+	{Verwandte Forschung}
+	{State of the Art}}
+\label{sec:state_of_the_art}
+
+\iflanguage{ngerman}
+{\hint{(1 Seite)}{Einschlägige Literatur zum speziellen Thema vorstellen. Die Literaturauswahl erfolgt in Absprache mit dem Betreuer und muss nicht vollständig das Thema abdecken. Vorgestellte Literatur sollte Probleme von (oder sogar das Fehlen von) existierenden Lösungen für das Thema der Arbeit aufzeigen.}}
+{\hint{(1 page)}{Initial literature related to the specific topic. This will be a small selection of papers relevant to the work, agreed on with the supervisor. The purpose of this section is to demonstrate problems or limitations of existing solutions.}}
+
+\dots
+
+\section{\iflanguage{ngerman}
+	{Problemstellung}
+	{Problem Statement}}
+\label{sec:problem_statement}
+
+\subsection{\iflanguage{ngerman}
+	{Beitrag der Arbeit}
+	{Thesis focus}}
+\label{sub:focus}
+
+\iflanguage{ngerman}
+{\hint{(0,75 Seiten)}{Auf Basis der Motivation (\ref{sec:motivation}) und der existierenden Forschung (\ref{sec:state_of_the_art}) soll die Problemstellung der eigenen Arbeit in Prosa beschrieben werden. Dazu sollen die Artefakte, die entstehen sollen (z.B. Konzept, Implementierung, Literaturstudie) sowie die Evaluations-Methodologie beschrieben werden (z.B. formale Analyse, Simulation, Benutzerstudie).}}
+{\hint{(0,75 pages)}{Based on the Motivation (\ref{sec:motivation}) and existing work (\ref{sec:state_of_the_art}) this section should describe the problems to be solved in this work. This should include a description of the additional ideas that will be designed (e.g., a concept, implementation, \dots) and the evaluation methodology (e.g., formal analysis, simulation, user study).}}
+
+\dots
+
+\subsection{\iflanguage{ngerman}
+	{Forschungsfragen}
+	{Research questions}}
+\label{sub:questions}
+
+\iflanguage{ngerman}
+{\hint{(0,25 Seiten)}{Forschungsfragen beschreiben die gesamte Problemstellung in einer oder wenigen Hauptfragen sowie weiteren Teilfragen und werden zusammen mit dem Betreuer erarbeitet. Forschungsfragen sind als W-Fragen (Wie, Warum, Was, Weshalb, \dots) formuliert und lassen sich in Typen unterteilen.\footnote{\url{http://www.studieren.at/uni-abc/forschungsfrage-welche-fragetypen-gibt-es}}
+%
+\begin{description}
+\item[Erklärung:] Warum ist etwas so wie es ist?
+\item[Beschreibung:] Wie sieht der jeweilige Sachverhalt aus?
+\item[Prognose:] Wie wird sich etwas entwickeln?
+\item[Bewertung:] Wie ist das Beschriebene/Erklärte zu bewerten?
+\item[Gestaltung:] Was muss getan werden, um ein Ziel zu erreichen?
+\end{description}
+
+Die Fragen sollen so formuliert sein, dass sie im Rahmen der Arbeit beantwortet werden können und die gesamte Problemstellung umfassen.
+}
+}
+{\hint{(0,25 Pages)}{Research questions describe one or several main questions of the thesis, as well as several sub-questions agreed upon with the supervisor. Research questions can be split in several types and are typically W-questions (why, what, how, \dots).\footnote{based on \url{http://www.studieren.at/uni-abc/forschungsfrage-welche-fragetypen-gibt-es} (German).}
+%
+\begin{description}
+\item[Explanation:] Why is something the way it is?
+\item[Description:] What do different approaches look like?
+\item[Prediction:] How will something develop?
+\item[Assessment:] How can the described/explained be assessed?
+\end{description}
+
+These questions should be written such that they can be answered within the thesis, and they should fully cover the research problem.
+}
+}
+
+%Main question
+\noindent\emph{\iflanguage{ngerman}{Hauptfrage}{Main question} \dots}
+%
+\begin{enumerate}
+\iflanguage{ngerman}{
+	\item Teilfrage %Partial question
+	\item Teilfrage %Partial question
+}{
+    \item Partial question
+    \item Partial question
+}
+	\item \dots
+\end{enumerate}
+
+\section{\iflanguage{ngerman}
+	{Eigener Ansatz}
+	{Approach}}
+\label{sec:approach}
+
+\iflanguage{ngerman}
+{\hint{(0,5 Seiten)}{Erste Ideen für die eigene Arbeit und erste Ansätze, um die Forschungsfragen zu beantworten. Ideen können Zeiger auf vielversprechende Literatur sein (muss nicht komplett gelesen sein) sowie eine Skizze wie man die Literatur anwenden möchte. Der Ansatz muss nicht konkret sein, sondern ist gedacht als Ausblick welche Ansätze man in den ersten Wochen nach der Anmeldung verfolgt.}}
+{\hint{(0,5 Pages)}{Describe the initial ideas for the thesis and the first steps to answer the research questions. Ideas can be pointers towards promising ideas in the literature (not necessarily read completely) or some sketch of how ideas from the literature may be developed. It does not need to be a concrete idea, but should indicate what will be done in the first weeks after the proposal is done.}}
+
+\dots
+
+\section{\iflanguage{ngerman}
+	{Planung}
+	{Planning}}
+\label{sec:planning}
+
+\subsection{\iflanguage{ngerman}
+	{Eigene Vorkenntnisse}
+	{Own Background}}
+\label{sub:background}
+
+\iflanguage{ngerman}
+{\hint{(0,25 Seiten)}{Relevantes Vorwissen zu Methodiken und Hilfsmitteln (z.B. Simulationsumgebung, passende formale Modelle, Algorithmen) aus gehörten Vorlesungen, Seminaren und Nebenjobs. Notwendige Fähigkeiten, die während der Arbeit erlernt werden sollen.}}
+{\hint{(0,25 Pages)}{Relevant background on methodologies and tools (e.g., Simulator, appropriate models, algorithms) from lectures, seminars and jobs. Also write down the necessary skills that need to be learned during the thesis.}}
+
+\dots
+
+\subsection{\iflanguage{ngerman}
+	{Benötigte Ressourcen}
+	{Required Resources}}
+\label{sub:resources}
+
+\iflanguage{ngerman}
+{\hint{(beliebig lang)}{Falls zutreffend, eine Liste von benötigter Hardware oder anderen besonderen Ressourcen.}}
+{\hint{(arbitrary length)}{If applicable, a list of required hardware or other resources.}}
+
+\begin{description}
+\iflanguage{ngerman}{
+\item[Ressource] Beschreibung \dots %resource, description
+\item[Ressource] Beschreibung \dots %resource, description
+}{
+\item[Resource] description\dots %resource, description
+\item[Resource] description\dots %resource, description
+}
+\end{description}
+
+\subsection{\iflanguage{ngerman}
+	{Zeitplanung}
+	{Work packages}}
+\label{sub:wp}
+
+\iflanguage{ngerman}
+{\hint{(0,5 Seiten)}{Einteilung der Arbeitspakete. Für die ersten Monate der Arbeit sollten diese auf Wochenebene sein. Der Plan darf gegen Ende grober sein und während der Laufzeit der Arbeit gegebenenfalls angepasst werden. Es sollte jedoch erkennbar sein, dass notwendige Schritte zur Fertigstellung identifiziert und sinnvoll eingeplant wurden. Die Zeitplanung soll konsistent sein mit den Forschungsfragen (\ref{sub:questions}) sowie möglicher Einarbeitungszeit (\ref{sub:background}) und möglichen Wartezeiten auf Ressourcen (\ref{sub:resources}). Zur Darstellung kann beispielsweise ein Gantt Diagramm, wie im folgenden Beispiel, verwendet werden.}}
+{\hint{(0,5 Pages)}{General description of the work. For the first months of the thesis, the plan should be on a weekly bases. Later workpackages can be more coarse. The plan may be adapted during the course of the thesis, if required. However, the initial plan must include necessary steps for the completion of the thesis. The time plan should be consistent with the research questions (\ref{sub:questions}) and the necessary background (\ref{sub:background}) and potential wait time for resources (\ref{sub:resources}). The plan may be included as a gantt chart (see following example), or in any other desired form.}}
+\iflanguage{ngerman}{
+\includegraphics[width=\textwidth]{example_gantt_plan_de}
+}{
+\includegraphics[width=\textwidth]{example_gantt_plan}
+}
+
+
+\subsection{\iflanguage{ngerman}
+	{Risiken und Ausweichplan}
+	{Contingency plan}}
+\label{sub:contingency}
+
+\iflanguage{ngerman}
+{\hint{(0,5 Seiten)}{Mögliche Risiken (z.B. nicht verfügbare Ressourcen, kein effizienter Algorithmus existent) die bereits vor Beginn der Arbeit abgeschätzt werden können sowie Ausweichstrategien.}}
+{\hint{(0,5 Pages)}{Possible risks (e.g., no available resources, no sufficiently efficient algorithm exists) that can already be estimated before starting the thesis, as well as possible contingency plans.}}
+
+\begin{enumerate}
+\item \iflanguage{ngerman}{Risiko}{Risk} \dots %Risk
+
+      \iflanguage{ngerman}{Cotingency} \dots %Contingency
+
+\item \iflanguage{ngerman}{Risiko}{Risk} \dots %Risk
+
+      \iflanguage{ngerman}{Cotingency} \dots %Contingency
+\end{enumerate}
+
+\nocite{*}
+\printbibliography
+
+\end{document}

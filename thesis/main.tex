@@ -1,0 +1,51 @@
+\documentclass{vs-thesis}
+\setdefaultlanguage{english} % english or german 
+
+% This package is only used in the demo and should be removed for the actual thesis.
+\usepackage{blindtext}
+
+% todo notes. (hint: remove for final version)
+\usepackage[backgroundcolor=white,linecolor=red,bordercolor=red,textsize=footnotesize]{todonotes}
+
+% Loads bibliography for citations.
+\addbibresource{bibliography.bib}
+
+% Define necessary metadata here
+\title{A Truly Magnificent Demo of the VS-Thesis Template with Respect to Ridiculously Long Titles}
+\thesistype{Master Thesis}
+\titlegraphic{titleimage.jpg}
+\submissiondate{\today}
+
+\author{Carol Denvers}
+\studentnumber{123456}
+% insert specific number given by your supervisor
+\internalid{VS-TODO-XYZ}
+\place{Ulm}
+
+\examiners{
+    Prof.\@~Dr.-Ing.\@~Jane Doe\\
+    Prof.\@~Dr.\,rer.\,nat.\@~Bruce Banner
+}
+\supervisors{M.Sc.\@~Arthur Dent}
+
+\institution{
+    Institute of Distributed Systems\\
+    Faculty of Engineering, Computer Science and Psychology\\
+    Ulm University}
+
+\license{\ccby}
+
+\begin{document}
+    \frontmatter
+    \maketitle
+    \abstract{\input{frontmatter/abstract}}
+    \tableofcontents
+
+    \mainmatter
+    \input{chapters/1-introduction}
+    \input{chapters/2-another-chapter}
+    \input{chapters/3-colors}
+
+    \backmatter
+    \printbibliography[heading=bibintoc]
+\end{document}

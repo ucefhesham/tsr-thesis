@@ -1,0 +1,9 @@
+build:
+  image: gitlab-vs.informatik.uni-ulm.de:4567/docker/latex
+  script:
+    - cd proposal; latexmk proposal.tex -pdf -outdir=out -pvc-; cd ..
+    - cd thesis; latexmk main.tex -pdf -outdir=out -pvc-; cd ..
+  artifacts:
+    paths:
+      - proposal/out/proposal.pdf
+      - thesis/out/main.pdf
