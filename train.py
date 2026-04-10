@@ -1,9 +1,10 @@
 import hydra
 from omegaconf import DictConfig
 import pytorch_lightning as L
-from pytorch_lightning.loggers import WandbLogger
+from typing import List
 import torch
 import wandb
+import os
 
 @hydra.main(config_path="configs", config_name="train", version_base="1.3")
 def train(cfg: DictConfig):
@@ -18,8 +19,19 @@ def train(cfg: DictConfig):
     # Ensures deterministic behavior across different runs
     L.seed_everything(42, workers=True)
 
-    # Initialize Weights & Biases Logger for experiment tracking
-    wandb_logger = WandbLogger(project='trust-tsr-thesis')
+    # Instantiate Loggers from configuration
+    logger: List[L.loggers.Logger] = []
+    if "logger" in cfg:
+        for _, lg_conf in cfg.logger.items():
+            print(f"Instantiating logger <{lg_conf._target_}>")
+            logger.append(hydra.utils.instantiate(lg_conf))
+
+    # Instantiate Callbacks (ModelCheckpoint, EarlyStopping, etc.)
+    callbacks: List[L.Callback] = []
+    if "callbacks" in cfg:
+        for _, cb_conf in cfg.callbacks.items():
+            print(f"Instantiating callback <{cb_conf._target_}>")
+            callbacks.append(hydra.utils.instantiate(cb_conf))
 
     # Instantiate DataModule (GTSRB) from configuration
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
@@ -30,17 +42,19 @@ def train(cfg: DictConfig):
     model = hydra.utils.instantiate(cfg.model)
 
     # Initialize PyTorch Lightning Trainer
-    # Hardware acceleration is set to 'auto' to support both GPU and CPU environments
+    print(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer = L.Trainer(
-        max_epochs=cfg.model.max_epochs,
-        accelerator='auto',
-        devices=1,
-        logger=wandb_logger,
-        deterministic=True  # Force deterministic algorithms where possible
+        **cfg.trainer,
+        logger=logger,
+        callbacks=callbacks,
+        deterministic=True
     )
 
-    # Optional: Log the model architecture and gradients
-    wandb_logger.watch(model, log="all")
+    # Optional: Log the model architecture and gradients if using Wandb
+    if logger:
+        for lg in logger:
+            if isinstance(lg, L.loggers.WandbLogger):
+                lg.watch(model, log="all")
 
     print("\n--- Phase 1: Training Lifecycle ---")
     # Fit the model using the training and validation sets

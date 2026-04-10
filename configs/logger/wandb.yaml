@@ -5,3 +5,4 @@ wandb:
   group: ""
   tags: ${tags}
   job_type: ""
+  log_model: "all" # Upload all checkpoints to W&B as artifacts

@@ -1,0 +1,20 @@
+# @package _global_
+
+# specify here default for paths
+paths:
+  # path to root directory
+  # any post-hoc qualified repo-root-relative path will work here
+  # the default is the current working directory
+  root_dir: .
+
+  # path to data directory
+  data_dir: ${paths.root_dir}/data/
+
+  # path to logging directory
+  log_dir: ${paths.root_dir}/logs/
+
+  # path to output directory
+  output_dir: ${paths.root_dir}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+  # working directory
+  work_dir: ${hydra:runtime.cwd}
