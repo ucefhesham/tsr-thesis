@@ -1,0 +1,17 @@
+# Severity Grouping for GTSRB (0-42)
+# Costs:
+# - Identity (preds == targets): 0.0
+# - Same Group: 0.1 (e.g., Speed 30 -> Speed 50)
+# - Dangerous Disparity (e.g., STOP -> Speed): 2.0
+# - Default (diff group): 1.0
+
+groups:
+  speed_limits: [0, 1, 2, 3, 4, 5, 7, 8]
+  end_of_limits: [6, 32, 41, 42]
+  priority: [11, 12, 13]
+  stop: [14]
+  prohibited: [9, 10, 15, 16, 17]
+  danger: [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+  mandatory: [33, 34, 35, 36, 37, 38, 39, 40]
+
+high_risk_targets: [13, 14, 26] # Yield, Stop, Traffic Signals

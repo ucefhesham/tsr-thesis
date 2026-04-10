@@ -9,6 +9,7 @@ defaults:
   - logger: wandb
   - trainer: default
   - paths: default
+  - metrics/severity: default
 
   # experiment config allows for version control of specific configurations, e.g. best_model.yaml
   - experiment: null

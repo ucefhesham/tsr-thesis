@@ -3,8 +3,8 @@ import torch.nn as nn
 import pytorch_lightning as L
 from torchvision.models import resnet18, ResNet18_Weights
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
-from src.metrics.custom_metrics import MulticlassBrierScore
-from typing import Any, Dict
+from src.metrics.custom_metrics import MulticlassBrierScore, SeverityWeightedError
+from typing import Any, Dict, Optional
 
 class ResNetBaselineModule(L.LightningModule):
     def __init__(
@@ -12,6 +12,7 @@ class ResNetBaselineModule(L.LightningModule):
         num_classes: int = 43,
         lr: float = 0.001,
         max_epochs: int = 50,
+        cost_config: Optional[Dict] = None,
     ):
         """
         ResNet-18 baseline classifier for Trust Analysis.
@@ -46,6 +47,11 @@ class ResNetBaselineModule(L.LightningModule):
         # Multiclass Brier Score: Proper scoring rule that penalizes both calibration and refinement
         self.val_brier = MulticlassBrierScore(num_classes=num_classes)
         self.test_brier = MulticlassBrierScore(num_classes=num_classes)
+
+        # SWE: Severity-Weighted Error (Trust Analysis)
+        if cost_config:
+            self.val_swe = SeverityWeightedError(cost_config=cost_config, num_classes=num_classes)
+            self.test_swe = SeverityWeightedError(cost_config=cost_config, num_classes=num_classes)
 
     def forward(self, x: torch.Tensor):
         return self.backbone(x)
@@ -83,6 +89,11 @@ class ResNetBaselineModule(L.LightningModule):
         acc(preds, y)
         ece(probs, y)
         brier(probs, y)
+        
+        if hasattr(self, f"{prefix}_swe"):
+            swe = getattr(self, f"{prefix}_swe")
+            swe(preds, y)
+            self.log(f"{prefix}/swe", swe, on_step=False, on_epoch=True, prog_bar=True)
 
         # Logging with prefix (val/ or test/)
         self.log(f"{prefix}/loss", loss, on_step=False, on_epoch=True, prog_bar=True)

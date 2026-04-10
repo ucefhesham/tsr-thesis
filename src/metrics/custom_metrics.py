@@ -60,7 +60,56 @@ class MulticlassBrierScore(Metric):
     def compute(self):
         return self.sum_squared_error / self.total
 
-# Placeholder for Severity-Weighted Error (SWE)
-# Requires a cost matrix W as per the thesis proposal
-def calculate_swe(preds, targets, cost_matrix):
-    pass
+class SeverityWeightedError(Metric):
+    def __init__(self, cost_config: dict, num_classes: int = 43, **kwargs):
+        """
+        Args:
+            cost_config: Dictionary containing 'groups' and 'high_risk_targets'.
+            num_classes: Number of classes in the dataset.
+        """
+        super().__init__(**kwargs)
+        self.num_classes = num_classes
+        self.add_state("sum_cost", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        
+        # Precompute cost matrix on CPU
+        W = torch.ones((num_classes, num_classes))
+        
+        # Identity (correct classification = 0 cost)
+        W.fill_diagonal_(0.0)
+        
+        # Same group penalties (minor error)
+        for _, members in cost_config.get('groups', {}).items():
+            for i in members:
+                for j in members:
+                    if i != j:
+                        W[i, j] = 0.1
+                        
+        # High-risk target penalties (dangerous to miss these)
+        for target in cost_config.get('high_risk_targets', []):
+            # Penalize any non-correct prediction for high-risk targets
+            for pred in range(num_classes):
+                if pred != target:
+                    W[target, pred] = 2.0
+                    
+        self.register_buffer("W", W)
+
+    def update(self, preds: torch.Tensor, targets: torch.Tensor):
+        """
+        Args:
+            preds: Predicted probabilities or logits [N, K]
+            targets: Ground truth labels [N]
+        """
+        if preds.ndim > 1:
+            predictions = torch.argmax(preds, dim=1)
+        else:
+            predictions = preds
+            
+        # Get costs from precomputed matrix
+        costs = self.W[targets, predictions]
+        
+        self.sum_cost += costs.sum()
+        self.total += targets.size(0)
+
+    def compute(self):
+        return self.sum_cost / self.total
