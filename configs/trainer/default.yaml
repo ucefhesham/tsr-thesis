@@ -8,4 +8,4 @@ max_epochs: 50
 accelerator: auto
 devices: 1
 
-deterministic: False
+deterministic: True

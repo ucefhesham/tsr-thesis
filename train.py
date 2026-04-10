@@ -43,11 +43,10 @@ def train(cfg: DictConfig):
 
     # Initialize PyTorch Lightning Trainer
     print(f"Instantiating trainer <{cfg.trainer._target_}>")
-    trainer = L.Trainer(
-        **cfg.trainer,
-        logger=logger,
-        callbacks=callbacks,
-        deterministic=True
+    trainer: L.Trainer = hydra.utils.instantiate(
+        cfg.trainer,
+        logger=logger, 
+        callbacks=callbacks
     )
 
     # Optional: Log the model architecture and gradients if using Wandb
