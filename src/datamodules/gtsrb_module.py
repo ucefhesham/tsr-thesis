@@ -4,6 +4,11 @@ from torchvision.datasets import GTSRB
 from torchvision import transforms
 import torch
 from typing import Optional, List
+import os
+import urllib.request
+import zipfile
+import shutil
+from pathlib import Path
 
 class GTSRBDataModule(L.LightningDataModule):
     def __init__(
@@ -51,7 +56,36 @@ class GTSRBDataModule(L.LightningDataModule):
 
     def prepare_data(self):
         """Download GTSRB data if not already present."""
+        # Standard download for training and test images
         GTSRB(self.hparams.data_dir, split="train", download=True)
+        
+        # Note: torchvision often fails to download the test Ground Truth CSV
+        # We handle this manually to ensure robustness in Colab/Fresh environments
+        csv_path = Path(self.hparams.data_dir) / "gtsrb" / "GT-final_test.csv"
+        if not csv_path.exists():
+            print(f"Test ground truth not found at {csv_path}. Attempting manual download...")
+            url = "https://sid.erda.dk/public/archives/daaeac0d7ce1152aea9b61d9f1e19370/GTSRB_Final_Test_GT.zip"
+            zip_path = Path(self.hparams.data_dir) / "GTSRB_Final_Test_GT.zip"
+            
+            # Download
+            urllib.request.urlretrieve(url, zip_path)
+            
+            # Extract
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(self.hparams.data_dir)
+            
+            # Restructure: Move CSV to the location torchvision expects (root of gtsrb folder)
+            extracted_csv = Path(self.hparams.data_dir) / "GTSRB" / "Final_Test" / "GT-final_test.csv"
+            if extracted_csv.exists():
+                target_folder = Path(self.hparams.data_dir) / "gtsrb"
+                target_folder.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(extracted_csv), str(csv_path))
+            
+            # Cleanup
+            if zip_path.exists():
+                os.remove(zip_path)
+            
+        # Final validation call
         GTSRB(self.hparams.data_dir, split="test", download=True)
 
     def setup(self, stage: Optional[str] = None):
