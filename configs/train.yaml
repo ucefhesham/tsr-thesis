@@ -1,0 +1,20 @@
+# @package _global_
+
+# specify here default training configuration
+defaults:
+  - _self_
+  - datamodule: gtsrb
+  - model: resnet18
+  - callbacks: null
+  - logger: null
+  - trainer: default
+
+  # experiment config allows for version control of specific configurations, e.g. best_model.yaml
+  - experiment: null
+
+task_name: "train"
+
+tags: ["dev", "baseline"]
+
+# path to data directory
+data_dir: ./data/

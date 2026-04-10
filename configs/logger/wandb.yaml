@@ -1,0 +1,7 @@
+wandb:
+  _target_: pytorch_lightning.loggers.WandbLogger
+  project: "trust-analysis-tsr"
+  name: ${task_name}
+  group: ""
+  tags: ${tags}
+  job_type: ""
