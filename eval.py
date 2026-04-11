@@ -73,8 +73,7 @@ def evaluate(cfg: DictConfig):
             writer.writerow(["clean", 0, results[0]["test/acc"], results[0]["test/ece"]])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
-    # Re-enabled workers now that setup(stage="test") logic is hardened.
-    datamodule.hparams.num_workers = 4
+    # Stress sweep respects the datamodule configuration for workers and batch size
     
     categories = ["noise", "blur", "weather", "compression"]
     severities = [1, 2, 3, 4, 5]
