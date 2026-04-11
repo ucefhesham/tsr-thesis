@@ -32,8 +32,9 @@ class TrustStressTester:
     def _get_corruption(self, c_type: str, s: int):
         """Maps severity 1-5 to specific Albumentations parameters."""
         if c_type == "noise":
-            # Scales variance based on severity
-            return A.GaussNoise(var_limit=(20.0 * s, 100.0 * s), p=1.0)
+            # Albumentations 2.0+: use std_range instead of var_limit
+            # We scale the std-dev range based on severity
+            return A.GaussNoise(std_range=(np.sqrt(20.0 * s), np.sqrt(100.0 * s)), p=1.0)
         
         elif c_type == "blur":
             # Scales motion blur kernel size

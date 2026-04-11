@@ -65,6 +65,10 @@ def evaluate(cfg: DictConfig):
             writer.writerow(["clean", 0, results[0]["test/acc"], results[0]["test/ece"]])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
+    # CRITICAL: Disable multi-processing workers for the stress sweep.
+    # This ensures that each severity change is picked up immediately in the main process.
+    datamodule.hparams.num_workers = 0
+    
     categories = ["noise", "blur", "weather", "compression"]
     severities = [1, 2, 3, 4, 5]
 
