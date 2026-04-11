@@ -53,8 +53,11 @@ def evaluate(cfg: DictConfig):
         print("\n[ERROR] Please provide a valid checkpoint path using 'ckpt_path=/path/to/checkpoint.ckpt'")
         return
 
-    print(f"Loading model from: {ckpt_path}")
+    print(f"Loading model weights from: {ckpt_path}")
     model = hydra.utils.instantiate(cfg.model)
+    # Load state dict manually to prevent mismatches when backbone is swapped later
+    checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    model.load_state_dict(checkpoint["state_dict"])
     
     # Instantiate Trainer for evaluation
     trainer = L.Trainer(
@@ -66,6 +69,8 @@ def evaluate(cfg: DictConfig):
     )
 
     print("\n--- Phase 0: Post-Hoc Calibration ---")
+    # Use 0 workers for calibration set to avoid MemoryError during process spawning
+    datamodule.hparams.num_workers = 0
     cal_loader = datamodule.calibration_dataloader()
     
     # Instantiate the wrapper with the existing backbone
@@ -90,7 +95,8 @@ def evaluate(cfg: DictConfig):
     for mode_name, backbone in evaluation_modes:
         print(f"\nEvaluating Clean Baseline [Mode: {mode_name}]...")
         model.backbone = backbone
-        results = trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+        # USE ckpt_path=None because weights are already loaded
+        results = trainer.test(model=model, datamodule=datamodule, ckpt_path=None)
         
         if results:
             with open(results_path, mode="a", newline="") as f:
@@ -133,8 +139,8 @@ def evaluate(cfg: DictConfig):
                     callbacks=[RichProgressBar(refresh_rate=1)],
                 )
                 
-                # 4. Run evaluation
-                results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+                # 4. Run evaluation with ALREADY LOADED weights
+                results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=None)
                 
                 # 5. Extract metrics and append to CSV
                 if results:
