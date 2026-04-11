@@ -83,10 +83,15 @@ def evaluate(cfg: DictConfig):
                 input_size=cfg.datamodule.input_size
             )
             
-            # 2. Inject the transform into the test dataset
-            datamodule.data_test.transform = stress_transform
+            # 2. DEEP HARDENING: Overwrite the transform template and force a setup
+            # This prevents the Trainer from resetting our changes internally
+            datamodule.eval_transforms = stress_transform
+            datamodule.setup(stage="test")
             
-            # 3. CRITICAL: Re-instantiate Trainer to clear all data caches
+            # 3. Extra check for the console
+            print(f"DEBUG: Active transform is now {type(datamodule.data_test.transform)}")
+            
+            # 4. CRITICAL: Re-instantiate Trainer to clear all data caches
             fresh_trainer = L.Trainer(
                 accelerator="auto",
                 devices="auto",
@@ -94,7 +99,7 @@ def evaluate(cfg: DictConfig):
                 enable_progress_bar=False,
             )
             
-            # 4. Run evaluation and capture results
+            # 5. Run evaluation and capture results
             results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
             
             # 4. Extract metrics and append to CSV
