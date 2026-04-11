@@ -6,12 +6,22 @@ from PIL import Image
 import cv2
 import random
 
-class FastFog:
+class FastFog(A.ImageOnlyTransform):
     """
     Optimized Fog transform that pre-generates a pool of masks during 
     initialization to avoid heavy Perlin noise generation in the data loop.
+    Compatible with Albumentations 2.0+ by inheriting from ImageOnlyTransform.
     """
-    def __init__(self, fog_coef_range: tuple, alpha_coef: float, size: int = 224, num_masks: int = 40):
+    def __init__(
+        self, 
+        fog_coef_range: tuple = (0.03, 0.08), 
+        alpha_coef: float = 0.1, 
+        size: int = 224, 
+        num_masks: int = 40,
+        always_apply: bool = True, 
+        p: float = 1.0
+    ):
+        super().__init__(always_apply=always_apply, p=p)
         self.masks = []
         # Use standard Albumentations to generate high-quality base masks
         base_fog = A.RandomFog(fog_coef_range=fog_coef_range, alpha_coef=alpha_coef, p=1.0)
@@ -23,10 +33,7 @@ class FastFog:
             fog_layer = base_fog(image=dummy_img)["image"]
             self.masks.append(fog_layer)
 
-    def __call__(self, force_apply=False, **kwargs):
-        # Compatible with Albumentations-style calling (image=...)
-        image = kwargs["image"]
-        
+    def apply(self, img: np.ndarray, **params) -> np.ndarray:
         # Pick a random mask from the pool
         mask = random.choice(self.masks)
         
@@ -36,8 +43,11 @@ class FastFog:
         
         # Super-fast blending: image + mask
         # Since the mask was generated on a black image, simple addition works
-        # and is extremely fast in OpenCV.
-        return {"image": cv2.add(image, mask)}
+        return cv2.add(img, mask)
+
+    @property
+    def targets(self):
+        return {"image": self.apply}
 
 class TrustStressTester:
     """
