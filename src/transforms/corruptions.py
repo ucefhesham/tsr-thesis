@@ -44,12 +44,17 @@ class TrustStressTester:
             return A.MotionBlur(blur_limit=(3 + 4 * s), p=1.0)
         
         elif c_type == "weather":
-            # Simulates increasing fog density
-            return A.RandomFog(fog_coef_lower=0.1 * s, fog_coef_upper=0.1 * s + 0.1, p=1.0)
+            # Albumentations 2.0+: use fog_coef_range
+            # Tuning: original 0.1 was too thick. Using 0.03 steps for better curves.
+            return A.RandomFog(
+                fog_coef_range=(0.03 * s, 0.03 * s + 0.05), 
+                alpha_coef=0.1, 
+                p=1.0
+            )
         
         elif c_type == "compression":
-            # Albumentations 2.0+: use quality_range tuple
-            quality = max(5, 100 - (18 * s)) # Slightly refined scaling
+            # Albumentations 2.0+: use quality_range
+            quality = max(5, 100 - (18 * s))
             return A.ImageCompression(quality_range=(quality, quality), p=1.0)
         
         else:
