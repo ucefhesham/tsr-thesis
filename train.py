@@ -1,6 +1,7 @@
 import hydra
 from omegaconf import DictConfig
 import pytorch_lightning as L
+from pytorch_lightning.callbacks import ModelCheckpoint
 from typing import List
 import torch
 import wandb
@@ -33,6 +34,17 @@ def train(cfg: DictConfig):
             print(f"Instantiating callback <{cb_conf._target_}>")
             callbacks.append(hydra.utils.instantiate(cb_conf))
 
+    # Senior ML Engineer: Explicit Trust-Specific Checkpointing
+    # Bypassing cfg to ensure strict adherence to optimal weight storage
+    checkpoint_callback = ModelCheckpoint(
+        monitor='val/ece', 
+        mode='min', 
+        save_top_k=1, 
+        dirpath='checkpoints/', 
+        filename='best-trust-baseline'
+    )
+    callbacks.append(checkpoint_callback)
+
     # Instantiate DataModule (GTSRB) from configuration
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
     datamodule = hydra.utils.instantiate(cfg.datamodule)
@@ -61,7 +73,7 @@ def train(cfg: DictConfig):
 
     print("\n--- Phase 2: Evaluation Lifecycle ---")
     # Immediately evaluate accuracy and reliability metrics on the official GTSRB test split
-    # Uses the 'best' checkpoint found during the validation phase
+    # Explicitly loads the 'best' checkpoint (optimal validation ECE) instead of final weights
     trainer.test(model, datamodule=datamodule, ckpt_path="best")
 
 if __name__ == "__main__":
