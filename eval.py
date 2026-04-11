@@ -52,7 +52,7 @@ def evaluate(cfg: DictConfig):
         accelerator="auto", # Automatically detects GPU/TPU/CPU
         devices="auto",     # Automatically selects available units
         logger=False, 
-        enable_progress_bar=False,
+        enable_progress_bar=True,
     )
 
     print("\n--- Phase 1: Standard Evaluation (Clean Baseline) ---")
@@ -65,16 +65,15 @@ def evaluate(cfg: DictConfig):
             writer.writerow(["clean", 0, results[0]["test/acc"], results[0]["test/ece"]])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
-    # CRITICAL: Disable multi-processing workers for the stress sweep.
-    # This ensures that each severity change is picked up immediately in the main process.
-    datamodule.hparams.num_workers = 0
+    # Re-enabled workers now that setup(stage="test") logic is hardened.
+    datamodule.hparams.num_workers = 4
     
     categories = ["noise", "blur", "weather", "compression"]
     severities = [1, 2, 3, 4, 5]
 
     for corruption in categories:
         for severity in severities:
-            print(f"\n>>> Stress Test: [{corruption.upper()}] | Severity: {severity} <<<")
+            print(f"\n>>> Stress Test: [{corruption.upper()}] | Severity: {severity} <<<", flush=True)
             
             # 1. Create the specific Stress Transform
             stress_transform = TrustStressTester(
@@ -96,7 +95,7 @@ def evaluate(cfg: DictConfig):
                 accelerator="auto",
                 devices="auto",
                 logger=False,
-                enable_progress_bar=False,
+                enable_progress_bar=True,
             )
             
             # 5. Run evaluation and capture results
