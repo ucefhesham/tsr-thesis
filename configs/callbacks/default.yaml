@@ -12,3 +12,8 @@ early_stopping:
   monitor: "val/acc"
   patience: 10
   mode: "max"
+
+# Optimized Progress Bar for cloud/clean logging
+progress_bar:
+  _target_: pytorch_lightning.callbacks.TQDMProgressBar
+  refresh_rate: 50

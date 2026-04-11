@@ -17,8 +17,12 @@ def train(cfg: DictConfig):
     """
     
     # CRITICAL: Strict Reproducibility
-    # Ensures deterministic behavior across different runs
     L.seed_everything(42, workers=True)
+
+    # SECURE: Allowlist Hydra/OmegaConf for PyTorch 2.6+ weights_only loading
+    from omegaconf.listconfig import ListConfig
+    from omegaconf.base import ContainerMetadata
+    torch.serialization.add_safe_globals([DictConfig, ListConfig, ContainerMetadata])
 
     # Instantiate Loggers from configuration
     logger: List[L.loggers.Logger] = []
@@ -43,7 +47,8 @@ def train(cfg: DictConfig):
         dirpath='checkpoints/', 
         filename='best-trust-baseline'
     )
-    callbacks.append(checkpoint_callback)
+    # Insert at index 0 so trainer.test(ckpt_path="best") prioritizes this monitor
+    callbacks.insert(0, checkpoint_callback)
 
     # Instantiate DataModule (GTSRB) from configuration
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
@@ -69,12 +74,14 @@ def train(cfg: DictConfig):
 
     print("\n--- Phase 1: Training Lifecycle ---")
     # Fit the model using the training and validation sets
-    trainer.fit(model, datamodule=datamodule)
+    # Supports automatic resumption if ckpt_path is provided via Hydra config
+    ckpt_path = cfg.get("ckpt_path")
+    trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path)
 
     print("\n--- Phase 2: Evaluation Lifecycle ---")
-    # Immediately evaluate accuracy and reliability metrics on the official GTSRB test split
-    # Explicitly loads the 'best' checkpoint (optimal validation ECE) instead of final weights
-    trainer.test(model, datamodule=datamodule, ckpt_path="best")
+    # --- Phase 5: Test ---
+    # Loading 'best' weights from Trust-optimized checkpoint for final report
+    trainer.test(model, datamodule=datamodule, ckpt_path="best", weights_only=False)
 
 if __name__ == "__main__":
     train()

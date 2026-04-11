@@ -20,3 +20,6 @@ tags: ["dev", "baseline"]
 
 # path to data directory
 data_dir: ./data/
+
+# path to checkpoint for evaluation/resumption
+ckpt_path: null

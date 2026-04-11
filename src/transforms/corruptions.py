@@ -2,40 +2,74 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import torch
 import numpy as np
+from PIL import Image
+
+class TrustStressTester:
+    """
+    Scientific wrapper for Albumentations corruptions to ensure compatibility with 
+    standard PyTorch Datasets. Handles PIL -> NumPy -> Tensor logic.
+    """
+    def __init__(self, corruption_type: str, severity: int = 1, input_size: int = 224):
+        self.corruption_type = corruption_type
+        self.severity = severity
+        self.input_size = input_size
+        
+        # Build the pipeline with strict order:
+        # Resize -> [Corruption] -> Normalize -> ToTensorV2
+        ops = [A.Resize(input_size, input_size)]
+        
+        # Inject specific corruption logic
+        ops.append(self._get_corruption(corruption_type, severity))
+        
+        # Finalize with ImageNet stats and PyTorch conversion
+        ops.extend([
+            A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ToTensorV2(),
+        ])
+        
+        self.pipeline = A.Compose(ops)
+
+    def _get_corruption(self, c_type: str, s: int):
+        """Maps severity 1-5 to specific Albumentations parameters."""
+        if c_type == "noise":
+            # Scales variance based on severity
+            return A.GaussNoise(var_limit=(20.0 * s, 100.0 * s), p=1.0)
+        
+        elif c_type == "blur":
+            # Scales motion blur kernel size
+            return A.MotionBlur(blur_limit=(3 + 4 * s), p=1.0)
+        
+        elif c_type == "weather":
+            # Simulates increasing fog density
+            return A.RandomFog(fog_coef_lower=0.1 * s, fog_coef_upper=0.1 * s + 0.1, p=1.0)
+        
+        elif c_type == "compression":
+            # Decreases JPEG quality (100 is best, 0 is worst)
+            quality = max(5, 100 - (20 * s))
+            return A.ImageCompression(quality_lower=quality, quality_upper=quality, p=1.0)
+        
+        else:
+            # Identity op if type not found
+            return A.NoOp(p=1.0)
+
+    def __call__(self, img: Image.Image) -> torch.Tensor:
+        """
+        Accepts PIL Image, converts to NumPy, passes through Albumentations,
+        and returns the extracted Tensor.
+        """
+        # Convert PIL to NumPy (Albumentations requirement)
+        img_np = np.array(img)
+        
+        # Process through pipeline
+        transformed = self.pipeline(image=img_np)
+        
+        # Explicitly return only the extracted tensor to satisfy torchvision/Lightning
+        return transformed["image"]
 
 def get_base_transforms(input_size=224):
-    """Basic transforms for training/validation."""
+    """Standard evaluation transforms."""
     return A.Compose([
         A.Resize(input_size, input_size),
         A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ToTensorV2(),
     ])
-
-def get_corruption_transform(corruption_type, severity=1, input_size=224):
-    """
-    Returns an Albumentations transform for a specific corruption.
-    
-    Args:
-        corruption_type: String name of corruption (noise, blur, weather, compression)
-        severity: Intensity level (1-5)
-        input_size: Target image size
-    """
-    # Placeholder logic for the thesis's "stress suite"
-    transforms = [A.Resize(input_size, input_size)]
-    
-    if corruption_type == "noise":
-        transforms.append(A.GaussNoise(var_limit=(10.0 * severity, 50.0 * severity), p=1.0))
-    elif corruption_type == "blur":
-        transforms.append(A.MotionBlur(blur_limit=(3 + 2*severity), p=1.0))
-    elif corruption_type == "weather":
-        # Example: Simulating rain or fog could be complex, using placeholder
-        transforms.append(A.RandomFog(fog_coef_lower=0.1*severity, fog_coef_upper=0.2*severity, p=1.0))
-    elif corruption_type == "compression":
-        transforms.append(A.ImageCompression(quality_lower=100 - 15*severity, quality_upper=100 - 10*severity, p=1.0))
-    
-    transforms.extend([
-        A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ToTensorV2(),
-    ])
-    
-    return A.Compose(transforms)
