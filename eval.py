@@ -33,6 +33,9 @@ def evaluate(cfg: DictConfig):
     # Instantiate DataModule
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
     datamodule = hydra.utils.instantiate(cfg.datamodule)
+    
+    # Ensure data is downloaded (especially on Colab)
+    datamodule.prepare_data()
     datamodule.setup(stage="test")
 
     # Load Model from checkpoint
