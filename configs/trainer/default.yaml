@@ -7,5 +7,6 @@ max_epochs: 50
 
 accelerator: auto
 devices: 1
+precision: 16-mixed
 
 deterministic: True

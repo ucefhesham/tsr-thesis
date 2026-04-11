@@ -3,6 +3,41 @@ from albumentations.pytorch import ToTensorV2
 import torch
 import numpy as np
 from PIL import Image
+import cv2
+import random
+
+class FastFog:
+    """
+    Optimized Fog transform that pre-generates a pool of masks during 
+    initialization to avoid heavy Perlin noise generation in the data loop.
+    """
+    def __init__(self, fog_coef_range: tuple, alpha_coef: float, size: int = 224, num_masks: int = 40):
+        self.masks = []
+        # Use standard Albumentations to generate high-quality base masks
+        base_fog = A.RandomFog(fog_coef_range=fog_coef_range, alpha_coef=alpha_coef, p=1.0)
+        dummy_img = np.zeros((size, size, 3), dtype=np.uint8)
+        
+        print(f"DEBUG: Pre-generating {num_masks} fog masks for speed optimization...")
+        for _ in range(num_masks):
+            # Apply RandomFog to black image to extract ONLY the fog layer
+            fog_layer = base_fog(image=dummy_img)["image"]
+            self.masks.append(fog_layer)
+
+    def __call__(self, force_apply=False, **kwargs):
+        # Compatible with Albumentations-style calling (image=...)
+        image = kwargs["image"]
+        
+        # Pick a random mask from the pool
+        mask = random.choice(self.masks)
+        
+        # Randomly flip/rotate the mask for added variety (zero cost)
+        if random.random() > 0.5: mask = np.fliplr(mask)
+        if random.random() > 0.5: mask = np.flipud(mask)
+        
+        # Super-fast blending: image + mask
+        # Since the mask was generated on a black image, simple addition works
+        # and is extremely fast in OpenCV.
+        return {"image": cv2.add(image, mask)}
 
 class TrustStressTester:
     """
@@ -32,33 +67,27 @@ class TrustStressTester:
     def _get_corruption(self, c_type: str, s: int):
         """Maps severity 1-5 to specific Albumentations parameters."""
         if c_type == "noise":
-            # Albumentations 2.0+: use std_range instead of var_limit (scale 0 to 1)
-            # Increasing scale: severity 5 will have up to ~27% noise
             return A.GaussNoise(
                 std_range=(np.sqrt(50.0 * s) / 255.0, np.sqrt(400.0 * s) / 255.0), 
                 p=1.0
             )
         
         elif c_type == "blur":
-            # Scales motion blur kernel size
             return A.MotionBlur(blur_limit=(3 + 4 * s), p=1.0)
         
         elif c_type == "weather":
-            # Albumentations 2.0+: use fog_coef_range
-            # Tuning: original 0.1 was too thick. Using 0.03 steps for better curves.
-            return A.RandomFog(
+            # Optimization: Use Cached FastFog to avoid heavy Perlin noise generation overhead
+            return FastFog(
                 fog_coef_range=(0.03 * s, 0.03 * s + 0.05), 
                 alpha_coef=0.1, 
-                p=1.0
+                size=self.input_size
             )
         
         elif c_type == "compression":
-            # Albumentations 2.0+: use quality_range
             quality = max(5, 100 - (18 * s))
             return A.ImageCompression(quality_range=(quality, quality), p=1.0)
         
         else:
-            # Identity op if type not found
             return A.NoOp(p=1.0)
 
     def __call__(self, img: Image.Image) -> torch.Tensor:
@@ -66,13 +95,8 @@ class TrustStressTester:
         Accepts PIL Image, converts to NumPy, passes through Albumentations,
         and returns the extracted Tensor.
         """
-        # Convert PIL to NumPy (Albumentations requirement)
         img_np = np.array(img)
-        
-        # Process through pipeline
         transformed = self.pipeline(image=img_np)
-        
-        # Explicitly return only the extracted tensor to satisfy torchvision/Lightning
         return transformed["image"]
 
 def get_base_transforms(input_size=224):

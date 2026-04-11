@@ -4,6 +4,12 @@ import pytorch_lightning as L
 from pytorch_lightning.callbacks import ModelCheckpoint
 from typing import List
 import torch
+import cv2
+import os
+
+# Disable OpenCV multithreading to prevent hangs in multi-worker dataloaders
+cv2.setNumThreads(0)
+cv2.ocl.setUseOpenCL(False)
 import wandb
 import os
 

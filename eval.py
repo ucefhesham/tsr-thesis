@@ -3,9 +3,16 @@ from omegaconf import DictConfig
 import pytorch_lightning as L
 from typing import List
 import torch
+import cv2
+import os
+
+# Disable OpenCV multithreading to prevent hangs in multi-worker dataloaders
+cv2.setNumThreads(0)
+cv2.ocl.setUseOpenCL(False)
 import csv
 import os
 from src.transforms.corruptions import TrustStressTester
+from pytorch_lightning.callbacks import RichProgressBar
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="train.yaml")
 def evaluate(cfg: DictConfig):
@@ -47,12 +54,13 @@ def evaluate(cfg: DictConfig):
     print(f"Loading model from: {ckpt_path}")
     model = hydra.utils.instantiate(cfg.model)
     
-    # Instantiate Trainer for evaluation (Quiet mode with Auto-Hardware detection)
+    # Instantiate Trainer for evaluation
     trainer = L.Trainer(
-        accelerator="auto", # Automatically detects GPU/TPU/CPU
-        devices="auto",     # Automatically selects available units
+        accelerator="auto",
+        devices="auto",
+        precision="16-mixed",
         logger=False, 
-        enable_progress_bar=True,
+        callbacks=[RichProgressBar(refresh_rate=1)],
     )
 
     print("\n--- Phase 1: Standard Evaluation (Clean Baseline) ---")
@@ -90,15 +98,26 @@ def evaluate(cfg: DictConfig):
             # 3. Extra check for the console
             print(f"DEBUG: Active transform is now {type(datamodule.data_test.transform)}")
             
-            # 4. CRITICAL: Re-instantiate Trainer to clear all data caches
+            # 4. DIAGNOSTIC: Test a single batch fetch to verify Loader health
+            # If this hangs, the issue is in the Transform/DataLoader workers.
+            print(f"DEBUG: Testing batch fetch for {corruption} severity {severity}...", end="", flush=True)
+            test_loader = datamodule.test_dataloader()
+            try:
+                _ = next(iter(test_loader))
+                print(" [OK]")
+            except Exception as e:
+                print(f" [FAILED] Error: {e}")
+            
+            # 5. CRITICAL: Re-instantiate Trainer to clear all data caches
             fresh_trainer = L.Trainer(
                 accelerator="auto",
                 devices="auto",
+                precision="16-mixed",
                 logger=False,
-                enable_progress_bar=True,
+                callbacks=[RichProgressBar(refresh_rate=1)],
             )
             
-            # 5. Run evaluation and capture results
+            # 6. Run evaluation and capture results
             results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
             
             # 4. Extract metrics and append to CSV
