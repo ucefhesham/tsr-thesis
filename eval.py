@@ -11,6 +11,7 @@ cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 import csv
 import os
+import gc
 from src.transforms.corruptions import TrustStressTester
 from pytorch_lightning.callbacks import RichProgressBar
 
@@ -73,7 +74,9 @@ def evaluate(cfg: DictConfig):
             writer.writerow(["clean", 0, results[0]["test/acc"], results[0]["test/ece"]])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
-    # Stress sweep respects the datamodule configuration for workers and batch size
+    # Stress sweep respects the datamodule configuration, but we disable 
+    # persistent workers to prevent memory leaks during the loop.
+    datamodule.hparams.persistent_workers = False
     
     categories = ["noise", "blur", "weather", "compression"]
     severities = [1, 2, 3, 4, 5]
@@ -126,6 +129,11 @@ def evaluate(cfg: DictConfig):
                 with open(results_path, mode="a", newline="") as f:
                     writer = csv.writer(f)
                     writer.writerow([corruption, severity, acc, ece])
+            
+            # --- Cleanup Phase ---
+            del fresh_trainer
+            gc.collect()
+            torch.cuda.empty_cache()
 
     print(f"\n--- Stress Evaluation Complete ---")
     print(f"Results successfully exported to: {results_path}")
