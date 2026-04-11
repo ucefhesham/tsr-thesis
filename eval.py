@@ -13,6 +13,7 @@ import csv
 import os
 import gc
 from src.transforms.corruptions import TrustStressTester
+from src.models.calibration import ModelWithTemperature
 from pytorch_lightning.callbacks import RichProgressBar
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="train.yaml")
@@ -36,7 +37,7 @@ def evaluate(cfg: DictConfig):
     # Initialize CSV with Header
     with open(results_path, mode="w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Corruption", "Severity", "Accuracy", "ECE"])
+        writer.writerow(["Corruption", "Severity", "Calibration_Method", "Accuracy", "ECE"])
 
     # Instantiate DataModule
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
@@ -64,14 +65,37 @@ def evaluate(cfg: DictConfig):
         callbacks=[RichProgressBar(refresh_rate=1)],
     )
 
-    print("\n--- Phase 1: Standard Evaluation (Clean Baseline) ---")
-    results = trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+    print("\n--- Phase 0: Post-Hoc Calibration ---")
+    cal_loader = datamodule.calibration_dataloader()
     
-    # Optional: Log clean baseline to CSV as Severity 0
-    if results:
-        with open(results_path, mode="a", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["clean", 0, results[0]["test/acc"], results[0]["test/ece"]])
+    # Instantiate the wrapper with the existing backbone
+    # We use model.backbone (ResNet-18) to ensure we're scaling the raw features
+    original_backbone = model.backbone
+    cal_model = ModelWithTemperature(original_backbone)
+    
+    # Move model to device manually for calibration since we aren't using Trainer.test yet
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+    cal_model.to(device)
+    
+    # Calculate optimal temperature
+    cal_model.set_temperature(cal_loader)
+
+    print("\n--- Phase 1: Standard Evaluation (Clean Baseline) ---")
+    evaluation_modes = [
+        ("None", original_backbone),
+        ("Temperature_Scaling", cal_model)
+    ]
+
+    for mode_name, backbone in evaluation_modes:
+        print(f"\nEvaluating Clean Baseline [Mode: {mode_name}]...")
+        model.backbone = backbone
+        results = trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+        
+        if results:
+            with open(results_path, mode="a", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["clean", 0, mode_name, results[0]["test/acc"], results[0]["test/ece"]])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
     # Stress sweep respects the datamodule configuration, but we disable 
@@ -93,47 +117,37 @@ def evaluate(cfg: DictConfig):
             )
             
             # 2. DEEP HARDENING: Overwrite the transform template and force a setup
-            # This prevents the Trainer from resetting our changes internally
             datamodule.eval_transforms = stress_transform
             datamodule.setup(stage="test")
             
-            # 3. Extra check for the console
-            print(f"DEBUG: Active transform is now {type(datamodule.data_test.transform)}")
-            
-            # 4. DIAGNOSTIC: Test a single batch fetch to verify Loader health
-            # If this hangs, the issue is in the Transform/DataLoader workers.
-            print(f"DEBUG: Testing batch fetch for {corruption} severity {severity}...", end="", flush=True)
-            test_loader = datamodule.test_dataloader()
-            try:
-                _ = next(iter(test_loader))
-                print(" [OK]")
-            except Exception as e:
-                print(f" [FAILED] Error: {e}")
-            
-            # 5. CRITICAL: Re-instantiate Trainer to clear all data caches
-            fresh_trainer = L.Trainer(
-                accelerator="auto",
-                devices="auto",
-                precision="16-mixed",
-                logger=False,
-                callbacks=[RichProgressBar(refresh_rate=1)],
-            )
-            
-            # 6. Run evaluation and capture results
-            results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
-            
-            # 4. Extract metrics and append to CSV
-            if results:
-                acc = results[0].get("test/acc", 0.0)
-                ece = results[0].get("test/ece", 0.0)
-                with open(results_path, mode="a", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerow([corruption, severity, acc, ece])
-            
-            # --- Cleanup Phase ---
-            del fresh_trainer
-            gc.collect()
-            torch.cuda.empty_cache()
+            for mode_name, backbone in evaluation_modes:
+                print(f"--- Running Eval [Mode: {mode_name}] ---")
+                model.backbone = backbone
+                
+                # 3. CRITICAL: Re-instantiate Trainer to clear all data caches for EVERY pass
+                fresh_trainer = L.Trainer(
+                    accelerator="auto",
+                    devices="auto",
+                    precision="16-mixed",
+                    logger=False,
+                    callbacks=[RichProgressBar(refresh_rate=1)],
+                )
+                
+                # 4. Run evaluation
+                results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+                
+                # 5. Extract metrics and append to CSV
+                if results:
+                    acc = results[0].get("test/acc", 0.0)
+                    ece = results[0].get("test/ece", 0.0)
+                    with open(results_path, mode="a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow([corruption, severity, mode_name, acc, ece])
+                
+                # Cleanup to keep memory stable
+                del fresh_trainer
+                gc.collect()
+                torch.cuda.empty_cache()
 
     print(f"\n--- Stress Evaluation Complete ---")
     print(f"Results successfully exported to: {results_path}")
