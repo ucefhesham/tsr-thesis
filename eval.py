@@ -47,12 +47,12 @@ def evaluate(cfg: DictConfig):
     print(f"Loading model from: {ckpt_path}")
     model = hydra.utils.instantiate(cfg.model)
     
-    # Instantiate Trainer for evaluation (Quiet mode)
+    # Instantiate Trainer for evaluation (Quiet mode with Auto-Hardware detection)
     trainer = L.Trainer(
-        accelerator=cfg.trainer.accelerator,
-        devices=cfg.trainer.devices,
-        logger=False, # Pure evaluation mode
-        enable_progress_bar=False, # Minimize log spam during stress sweep
+        accelerator="auto", # Automatically detects GPU/TPU/CPU
+        devices="auto",     # Automatically selects available units
+        logger=False, 
+        enable_progress_bar=False,
     )
 
     print("\n--- Phase 1: Standard Evaluation (Clean Baseline) ---")
