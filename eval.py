@@ -74,7 +74,7 @@ def evaluate(cfg: DictConfig):
 
     for corruption in categories:
         for severity in severities:
-            print(f">>> Stress Test: [{corruption.upper()}] | Severity: {severity}")
+            print(f"\n>>> Stress Test: [{corruption.upper()}] | Severity: {severity} <<<")
             
             # 1. Create the specific Stress Transform
             stress_transform = TrustStressTester(
@@ -86,8 +86,16 @@ def evaluate(cfg: DictConfig):
             # 2. Inject the transform into the test dataset
             datamodule.data_test.transform = stress_transform
             
-            # 3. Run evaluation and capture results
-            results = trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+            # 3. CRITICAL: Re-instantiate Trainer to clear all data caches
+            fresh_trainer = L.Trainer(
+                accelerator="auto",
+                devices="auto",
+                logger=False,
+                enable_progress_bar=False,
+            )
+            
+            # 4. Run evaluation and capture results
+            results = fresh_trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
             
             # 4. Extract metrics and append to CSV
             if results:

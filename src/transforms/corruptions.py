@@ -32,9 +32,12 @@ class TrustStressTester:
     def _get_corruption(self, c_type: str, s: int):
         """Maps severity 1-5 to specific Albumentations parameters."""
         if c_type == "noise":
-            # Albumentations 2.0+: use std_range instead of var_limit
-            # We scale the std-dev range based on severity
-            return A.GaussNoise(std_range=(np.sqrt(20.0 * s), np.sqrt(100.0 * s)), p=1.0)
+            # Albumentations 2.0+: use std_range instead of var_limit (scale 0 to 1)
+            # Increasing scale: severity 5 will have up to ~27% noise
+            return A.GaussNoise(
+                std_range=(np.sqrt(50.0 * s) / 255.0, np.sqrt(400.0 * s) / 255.0), 
+                p=1.0
+            )
         
         elif c_type == "blur":
             # Scales motion blur kernel size
@@ -45,9 +48,9 @@ class TrustStressTester:
             return A.RandomFog(fog_coef_lower=0.1 * s, fog_coef_upper=0.1 * s + 0.1, p=1.0)
         
         elif c_type == "compression":
-            # Decreases JPEG quality (100 is best, 0 is worst)
-            quality = max(5, 100 - (20 * s))
-            return A.ImageCompression(quality_lower=quality, quality_upper=quality, p=1.0)
+            # Albumentations 2.0+: use quality_range tuple
+            quality = max(5, 100 - (18 * s)) # Slightly refined scaling
+            return A.ImageCompression(quality_range=(quality, quality), p=1.0)
         
         else:
             # Identity op if type not found
