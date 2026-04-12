@@ -49,6 +49,31 @@ class FastFog(A.ImageOnlyTransform):
     def targets(self):
         return {"image": self.apply}
 
+class CropJitter(A.ImageOnlyTransform):
+    """
+    Simulates detector jitter by shifting and scaling the crop.
+    This is critical for Research Question 6: "Sensitivity to detector imperfections."
+    """
+    def __init__(self, shift_limit: float = 0.1, scale_limit: float = 0.1, always_apply: bool = True, p: float = 1.0):
+        super().__init__(always_apply=always_apply, p=p)
+        self.shift_limit = shift_limit
+        self.scale_limit = scale_limit
+
+    def apply(self, img: np.ndarray, **params) -> np.ndarray:
+        h, w = img.shape[:2]
+        
+        # Randomly choose shifts and scale
+        shift_x = np.random.uniform(-self.shift_limit, self.shift_limit) * w
+        shift_y = np.random.uniform(-self.shift_limit, self.shift_limit) * h
+        scale = np.random.uniform(1.0 - self.scale_limit, 1.0 + self.scale_limit)
+
+        # Build transformation matrix
+        M = np.float32([[scale, 0, shift_x], [0, scale, shift_y]])
+        
+        # Apply affine transformation (Shift + Scale)
+        # Using BORDER_REPLICATE to avoid introducing black borders which might leak as a 'cue'
+        return cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
+
 class TrustStressTester:
     """
     Scientific wrapper for Albumentations corruptions to ensure compatibility with 
@@ -96,6 +121,13 @@ class TrustStressTester:
         elif c_type == "compression":
             quality = max(5, 100 - (18 * s))
             return A.ImageCompression(quality_range=(quality, quality), p=1.0)
+        
+        elif c_type == "jitter":
+            return CropJitter(
+                shift_limit=0.04 * s, # Up to 20% shift at severity 5
+                scale_limit=0.04 * s, # Up to 20% scale at severity 5
+                p=1.0
+            )
         
         else:
             return A.NoOp(p=1.0)

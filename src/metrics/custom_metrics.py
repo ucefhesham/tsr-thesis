@@ -90,7 +90,11 @@ class SeverityWeightedError(Metric):
             # Penalize any non-correct prediction for high-risk targets
             for pred in range(num_classes):
                 if pred != target:
-                    W[target, pred] = 2.0
+                    W[target, pred] = 5.0 # Upgraded to 5.0 for safety-critical signs
+                    
+        # Explicit pair penalties (e.g., misclassifying low speed limit as high speed limit)
+        for pair in cost_config.get('explicit_costs', []):
+            W[pair['gt'], pair['pred']] = pair.get('cost', 10.0)
                     
         self.register_buffer("W", W)
 

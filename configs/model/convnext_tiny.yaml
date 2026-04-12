@@ -1,0 +1,15 @@
+_target_: src.models.convnext_baseline.ConvNextBaselineModule
+
+num_classes: 43
+lr: 0.0005
+max_epochs: 50
+
+# Safety cost matrix configuration for Severity-Weighted Error (SWE)
+cost_config:
+  groups:
+    speed_limits: [0, 1, 2, 3, 4, 5, 7, 8]  # Indices of speed limit signs
+    warnings: [11, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 31]
+  high_risk_targets: [14, 17]  # Stop (14) and No Entry (17) are safety-critical
+  explicit_costs:
+    - {gt: 0, pred: 8, cost: 10.0} # 20km/h (0) -> 120km/h (8) is very dangerous
+    - {gt: 14, pred: 12, cost: 15.0} # Stop (14) -> Priority Road (12) is fatal

@@ -14,6 +14,7 @@ import os
 import gc
 from src.transforms.corruptions import TrustStressTester
 from src.models.calibration import ModelWithTemperature
+from src.metrics.efficiency import compute_model_flops
 from pytorch_lightning.callbacks import RichProgressBar
 
 @hydra.main(version_base="1.3", config_path="configs", config_name="train.yaml")
@@ -40,9 +41,10 @@ def evaluate(cfg: DictConfig):
     results_path = f"logs/{model_name}_stress_test_results.csv"
     
     # Initialize CSV with Header
+    # Added GFLOPs to help plot the Trust-Per-Efficiency (TPE) metric
     with open(results_path, mode="w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Corruption", "Severity", "Calibration_Method", "Accuracy", "ECE"])
+        writer.writerow(["Corruption", "Severity", "Calibration_Method", "Accuracy", "ECE", "GFLOPs"])
 
     # Instantiate DataModule
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
@@ -63,6 +65,11 @@ def evaluate(cfg: DictConfig):
     # Load state dict manually to prevent mismatches when backbone is swapped later
     checkpoint = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     model.load_state_dict(checkpoint["state_dict"])
+    
+    # --- PHASE -1: Efficiency Profiling ---
+    # Compute GFLOPs once for the backbone
+    gflops = compute_model_flops(model.backbone, input_res=cfg.datamodule.input_size)
+    print(f"Model Complexity: {gflops:.3f} GFLOPs")
     
     # Instantiate Trainer for evaluation
     trainer = L.Trainer(
@@ -106,14 +113,14 @@ def evaluate(cfg: DictConfig):
         if results:
             with open(results_path, mode="a", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["clean", 0, mode_name, results[0]["test/acc"], results[0]["test/ece"]])
+                writer.writerow(["clean", 0, mode_name, results[0]["test/acc"], results[0]["test/ece"], gflops])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
     # Stress sweep respects the datamodule configuration, but we disable 
     # persistent workers to prevent memory leaks during the loop.
     datamodule.hparams.persistent_workers = False
     
-    categories = ["noise", "blur", "weather", "compression"]
+    categories = ["noise", "blur", "weather", "compression", "jitter"]
     severities = [1, 2, 3, 4, 5]
 
     for corruption in categories:
@@ -153,7 +160,7 @@ def evaluate(cfg: DictConfig):
                     ece = results[0].get("test/ece", 0.0)
                     with open(results_path, mode="a", newline="") as f:
                         writer = csv.writer(f)
-                        writer.writerow([corruption, severity, mode_name, acc, ece])
+                        writer.writerow([corruption, severity, mode_name, acc, ece, gflops])
                 
                 # Cleanup to keep memory stable
                 del fresh_trainer
