@@ -22,6 +22,10 @@ from typing import List
 import torch
 import cv2
 import os
+import csv
+from datetime import datetime
+import shutil
+from src.metrics.efficiency import compute_model_flops
 
 # Disable OpenCV multithreading to prevent hangs in multi-worker dataloaders
 cv2.setNumThreads(0)
@@ -69,32 +73,17 @@ def train(cfg: DictConfig):
     callbacks: List[L.Callback] = []
     if "callbacks" in cfg:
         for name, cb_conf in cfg.callbacks.items():
-            if name == "model_checkpoint":
-                continue
             print(f"Instantiating callback <{cb_conf._target_}>")
             callbacks.append(hydra.utils.instantiate(cb_conf))
 
-    # Senior ML Engineer: Explicit Trust-Specific Checkpointing
-    # Bypassing cfg to ensure strict adherence to optimal weight storage
-    model_name = "evidential" if "evidential" in cfg.model._target_.lower() else "baseline"
-    checkpoint_callback = ModelCheckpoint(
-        monitor='val/acc', 
-        mode='max', 
-        save_top_k=1, 
-        dirpath='checkpoints/', 
-        filename=f'best-trust-{model_name}',
-        save_last=True
-    )
-    # Insert at index 0 so trainer.test(ckpt_path="best") prioritizes this monitor
-    callbacks.insert(0, checkpoint_callback)
 
     # Instantiate DataModule (GTSRB) from configuration
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
     datamodule = hydra.utils.instantiate(cfg.datamodule)
 
-    # Instantiate Model (ResNetBaselineModule) from configuration
+    # Instantiate Model from configuration
     print(f"Instantiating model <{cfg.model._target_}>")
-    model = hydra.utils.instantiate(cfg.model)
+    model: L.LightningModule = hydra.utils.instantiate(cfg.model)
 
     # Initialize PyTorch Lightning Trainer
     print(f"Instantiating trainer <{cfg.trainer._target_}>")
@@ -117,9 +106,53 @@ def train(cfg: DictConfig):
     trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path)
 
     print("\n--- Phase 2: Evaluation Lifecycle ---")
-    # --- Phase 5: Test ---
-    # Loading 'best' weights from Trust-optimized checkpoint for final report
-    trainer.test(model, datamodule=datamodule, ckpt_path="best")
+    # Finding the best checkpoint found by the callback
+    best_ckpt_path = ""
+    for cb in callbacks:
+        if isinstance(cb, L.callbacks.ModelCheckpoint):
+            best_ckpt_path = cb.best_model_path
+            break
+            
+    # Loading 'best' weights for final report
+    results = trainer.test(model, datamodule=datamodule, ckpt_path=best_ckpt_path if best_ckpt_path else "best")
+
+    # --- Phase 3: Run Ledger & Permanent Tracking ---
+    if results:
+        res = results[0]
+        model_name = cfg.model.name
+        benchmark_dir = os.path.join(cfg.paths.root_dir, "benchmarks", model_name)
+        ledger_path = os.path.join(benchmark_dir, "run_ledger.csv")
+        
+        # 1. Compute Efficiency Metrics
+        gflops = compute_model_flops(model, input_size=(1, 3, cfg.datamodule.input_size, cfg.datamodule.input_size))
+        
+        # 2. Append to Ledger
+        headers = ["Timestamp", "Best_Checkpoint", "Top1_Acc", "SWE", "ESP", "ECE", "Brier", "GFLOPs"]
+        file_exists = os.path.isfile(ledger_path)
+        
+        with open(ledger_path, mode="a", newline="") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(headers)
+            
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                os.path.basename(best_ckpt_path),
+                res.get("test/acc", 0.0),
+                res.get("test/swe", 0.0),
+                res.get("test/esp", 0.0),
+                res.get("test/ece", 0.0),
+                res.get("test/brier", 0.0),
+                gflops
+            ])
+            
+        print(f"Run data permanently logged to: {ledger_path}")
+        
+        # 3. Convenience Copy: latest_completed.ckpt
+        if best_ckpt_path:
+            latest_path = os.path.join(benchmark_dir, "latest_completed.ckpt")
+            shutil.copy(best_ckpt_path, latest_path)
+            print(f"Best weight file promoted to parent directory: {latest_path}")
 
 if __name__ == "__main__":
     train()

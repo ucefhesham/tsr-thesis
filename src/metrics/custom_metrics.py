@@ -1,6 +1,7 @@
 import torch
 from torchmetrics import Metric
 import torch.nn.functional as F
+from typing import List, Dict, Any
 
 class ExpectedCalibrationError(Metric):
     def __init__(self, n_bins: int = 15, **kwargs):
@@ -36,6 +37,83 @@ class ExpectedCalibrationError(Metric):
                 ece += mask.float().mean() * torch.abs(bin_acc - bin_conf)
                 
         return ece
+
+class AdaptiveECE(ExpectedCalibrationError):
+    """
+    Adaptive ECE uses equal-mass binning (each bin has N/n_bins samples).
+    Provides a more robust estimate for sparse predictions.
+    """
+    def compute(self):
+        confidences = torch.cat(self.confidences)
+        accuracies = torch.cat(self.accuracies)
+        n = len(confidences)
+        
+        # Sort and find equal-mass boundaries using quantiles
+        sorted_conf, _ = torch.sort(confidences)
+        # We need n_bins + 1 boundaries
+        indices = torch.linspace(0, n-1, self.n_bins + 1, dtype=torch.long, device=confidences.device)
+        bin_boundaries = sorted_conf[indices]
+        
+        ece = torch.zeros(1, device=confidences.device)
+        for i in range(self.n_bins):
+            # Use <= for the last bin to include the maximum confidence
+            if i == self.n_bins - 1:
+                mask = (confidences >= bin_boundaries[i]) & (confidences <= bin_boundaries[i + 1])
+            else:
+                mask = (confidences >= bin_boundaries[i]) & (confidences < bin_boundaries[i + 1])
+                
+            if mask.any():
+                bin_acc = accuracies[mask].mean()
+                bin_conf = confidences[mask].mean()
+                ece += mask.float().mean() * torch.abs(bin_acc - bin_conf)
+                
+        return ece
+
+class ClasswiseECE(Metric):
+    """
+    Calculates ECE specifically for safety-critical classes.
+    """
+    def __init__(self, target_classes: List[int], n_bins: int = 15, **kwargs):
+        super().__init__(**kwargs)
+        self.target_classes = target_classes
+        self.n_bins = n_bins
+        self.add_state("confidences", default=[], dist_reduce_fx="cat")
+        self.add_state("accuracies", default=[], dist_reduce_fx="cat")
+        self.add_state("targets", default=[], dist_reduce_fx="cat")
+
+    def update(self, preds: torch.Tensor, targets: torch.Tensor):
+        confidences, predictions = torch.max(preds, dim=1)
+        accuracies = (predictions == targets).float()
+        
+        self.confidences.append(confidences)
+        self.accuracies.append(accuracies)
+        self.targets.append(targets)
+
+    def compute(self):
+        confidences = torch.cat(self.confidences)
+        accuracies = torch.cat(self.accuracies)
+        targets = torch.cat(self.targets)
+        
+        results = {}
+        for cls_id in self.target_classes:
+            mask = (targets == cls_id)
+            if not mask.any():
+                results[f"ece_class_{cls_id}"] = torch.tensor(0.0, device=confidences.device)
+                continue
+            
+            c_cls = confidences[mask]
+            a_cls = accuracies[mask]
+            
+            # Simple uniform ECE for the class subset
+            bin_boundaries = torch.linspace(0, 1, self.n_bins + 1, device=confidences.device)
+            ece_val = torch.zeros(1, device=confidences.device)
+            for i in range(self.n_bins):
+                b_mask = (c_cls > bin_boundaries[i]) & (c_cls <= bin_boundaries[i + 1])
+                if b_mask.any():
+                    ece_val += b_mask.float().mean() * torch.abs(a_cls[b_mask].mean() - c_cls[b_mask].mean())
+            results[f"ece_class_{cls_id}"] = ece_val
+            
+        return results
 
 class MulticlassBrierScore(Metric):
     def __init__(self, num_classes: int, **kwargs):
@@ -154,6 +232,53 @@ class AdvancedSeverityRisk(Metric):
                 results[f"asr/esp_{cat.lower()}"] = getattr(self, f"sum_esp_{cat}") / total
                 
         return results
+
+class EntropyScore(Metric):
+    """
+    Measures the average entropy of the predicted probability distribution.
+    Higher entropy indicates higher aleatoric (or sometimes epistemic) uncertainty.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("total_entropy", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor):
+        """
+        Args:
+            preds: Predicted probabilities [N, K]
+        """
+        # H(p) = -sum(p * log(p))
+        entropy = -torch.sum(preds * torch.log(preds + 1e-10), dim=1)
+        self.total_entropy += entropy.sum()
+        self.total += preds.size(0)
+
+    def compute(self):
+        return self.total_entropy / self.total
+
+class EnergyScore(Metric):
+    """
+    Measures the average Energy-based uncertainty score.
+    Higher energy (LogSumExp of logits) often indicates In-Distribution (ID).
+    Lower energy often indicates Out-of-Distribution (OOD).
+    """
+    def __init__(self, tau: float = 1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.tau = tau
+        self.add_state("total_energy", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, logits: torch.Tensor):
+        """
+        Args:
+            logits: Pre-softmax network outputs [N, K]
+        """
+        energy = self.tau * torch.logsumexp(logits / self.tau, dim=1)
+        self.total_energy += energy.sum()
+        self.total += logits.size(0)
+
+    def compute(self):
+        return self.total_energy / self.total
 
 # Keep alias for backward compatibility if needed, but ASR is the new standard
 SeverityWeightedError = AdvancedSeverityRisk

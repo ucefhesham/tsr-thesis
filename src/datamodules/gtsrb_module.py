@@ -14,8 +14,8 @@ class GTSRBDataModule(L.LightningDataModule):
     def __init__(
         self,
         data_dir: str = "data/",
-        batch_size: int = 32,
-        num_workers: int = 2,
+        batch_size: int = 160,
+        num_workers: int = 6,
         pin_memory: bool = True,
         input_size: int = 224,
     ):

@@ -28,7 +28,13 @@ def compute_model_flops(model: nn.Module, input_res: int = 224) -> float:
         # fvcore's FlopCountAnalysis is highly accurate for modern architectures like ConvNeXt
         flops = FlopCountAnalysis(model, dummy_input)
         total_flops = flops.total()
-        gflops = total_flops / 1e9
+        
+        # Multiply by num_samples if it's a stochastic model (e.g. MC Dropout)
+        num_samples = getattr(model, "num_samples", 1)
+        if hasattr(model, "hparams") and "num_samples" in model.hparams:
+            num_samples = model.hparams.num_samples
+            
+        gflops = (total_flops * num_samples) / 1e9
         return gflops
     except Exception as e:
         print(f"Error computing GFLOPs: {e}")

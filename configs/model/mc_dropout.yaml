@@ -1,0 +1,9 @@
+_target_: src.models.mc_dropout.MCDropoutModule
+name: "resnet18_mc_dropout"
+
+num_classes: 43
+lr: 0.001
+max_epochs: 50
+n_bins: 15
+num_samples: 10
+dropout_p: 0.15

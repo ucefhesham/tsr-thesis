@@ -14,7 +14,7 @@ paths:
   log_dir: ${paths.root_dir}/logs/
 
   # path to output directory
-  output_dir: ${paths.root_dir}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  output_dir: ${paths.root_dir}/benchmarks/${model.name}/${now:%Y-%m-%d_%H-%M-%S}
 
   # working directory
   work_dir: ${hydra:runtime.cwd}

@@ -1,15 +1,18 @@
 model_checkpoint:
   _target_: pytorch_lightning.callbacks.ModelCheckpoint
   dirpath: ${paths.output_dir}/checkpoints
-  save_top_k: 3
+  monitor: "val/swe" # Primary monitor for Safety/Trust
+  mode: "min"
+  save_top_k: 1
   save_last: True
+  filename: "epoch_{epoch:03d}-swe_{val/swe:.4f}-acc_{val/acc:.4f}"
   auto_insert_metric_name: False
 
 early_stopping:
   _target_: pytorch_lightning.callbacks.EarlyStopping
-  monitor: "val/acc"
-  patience: 20
-  mode: "max"
+  monitor: "val/swe"
+  patience: 25
+  mode: "min"
 
 # Optimized Progress Bar for cloud/clean logging
 progress_bar:

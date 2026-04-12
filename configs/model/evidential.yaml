@@ -1,7 +1,13 @@
-_target_: src.models.evidential_module.EvidentialResNetModule
+_target_: src.models.evidential_module.EvidentialModule
+name: "resnet18_evidential"
+
+# Use the ResNet18 backbone factory
+backbone:
+  _target_: src.models.backbones.get_resnet18_backbone
 
 num_classes: 43
 lr: 0.0005
 max_epochs: 100
 annealing_epochs: 30
-kl_penalty_weight: 0.2
+kl_penalty_weight: 0.4
+n_bins: 15

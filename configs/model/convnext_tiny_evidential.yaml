@@ -1,0 +1,12 @@
+_target_: src.models.evidential_module.EvidentialModule
+name: "convnext_tiny_evidential"
+
+# Use the ConvNeXt-Tiny backbone factory
+backbone:
+  _target_: src.models.backbones.get_convnext_tiny_backbone
+
+num_classes: 43
+lr: 0.00025  # ConvNeXt often prefers lower LR
+max_epochs: 100
+annealing_epochs: 30
+kl_penalty_weight: 0.2

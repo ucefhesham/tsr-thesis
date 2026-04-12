@@ -3,30 +3,25 @@ import torch.nn as nn
 import pytorch_lightning as L
 from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
-from src.metrics.custom_metrics import MulticlassBrierScore, AdvancedSeverityRisk
+from src.metrics.custom_metrics import MulticlassBrierScore, AdvancedSeverityRisk, EntropyScore, EnergyScore
 from typing import Any, Dict, Optional
 
 class ConvNextBaselineModule(L.LightningModule):
     def __init__(
         self,
         num_classes: int = 43,
-        lr: float = 0.0005,  # ConvNeXt often prefers slightly lower LR than ResNet
+        lr: float = 0.0005,
         max_epochs: int = 50,
-        cost_config: Optional[Dict] = None,
+        n_bins: int = 15,
+        name: Optional[str] = None,
+        **kwargs,
     ):
         """
         ConvNeXt-Tiny baseline classifier for Trust Analysis.
-        ConvNeXt is a modern isotropic architecture that often offers better inherent 
-        calibration than traditional pyramidal CNNs like ResNet.
-        
-        Args:
-            num_classes: Number of target classes (GTSRB = 43).
-            lr: Initial learning rate.
-            max_epochs: Total number of epochs for the CosineAnnealingLR scheduler.
-            cost_config: Configuration for Severity-Weighted Error.
         """
         super().__init__()
-        self.save_hyperparameters()
+        # Senior best practice: ignore catch-all kwargs in hparams
+        self.save_hyperparameters(ignore=['kwargs'])
 
         # Architecture: ConvNeXt-Tiny with ImageNet weights
         self.backbone = convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT)
@@ -55,6 +50,12 @@ class ConvNextBaselineModule(L.LightningModule):
         # We always instantiate this now as it's a senior requirement
         self.val_asr = AdvancedSeverityRisk(num_classes=num_classes)
         self.test_asr = AdvancedSeverityRisk(num_classes=num_classes)
+
+        # Advanced Uncertainty Proxies
+        self.val_entropy = EntropyScore()
+        self.test_entropy = EntropyScore()
+        self.val_energy = EnergyScore()
+        self.test_energy = EnergyScore()
 
     def forward(self, x: torch.Tensor):
         return self.backbone(x)
@@ -88,6 +89,11 @@ class ConvNextBaselineModule(L.LightningModule):
         ece(probs, y)
         brier(probs, y)
         
+        entropy = getattr(self, f"{prefix}_entropy")
+        energy = getattr(self, f"{prefix}_energy")
+        entropy(probs)
+        energy(logits)
+        
         asr = getattr(self, f"{prefix}_asr")
         asr_results = asr(probs, y)
         
@@ -95,6 +101,8 @@ class ConvNextBaselineModule(L.LightningModule):
         self.log(f"{prefix}/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/ece", ece, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/brier", brier, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/entropy", entropy, on_step=False, on_epoch=True)
+        self.log(f"{prefix}/energy", energy, on_step=False, on_epoch=True)
         self.log(f"{prefix}/swe", asr_results["asr/swe"], on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/esp", asr_results["asr/esp"], on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/near_miss_rate", asr_results["asr/near_miss_rate"], on_step=False, on_epoch=True)

@@ -4,26 +4,33 @@ import pytorch_lightning as L
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
 from src.models.evidential import EvidentialNetwork
 from src.losses.dirichlet_loss import EDLLoss
-from src.metrics.custom_metrics import AdvancedSeverityRisk
+from src.metrics.custom_metrics import (
+    AdvancedSeverityRisk, 
+    EntropyScore, 
+    AdaptiveECE, 
+    ClasswiseECE
+)
 from typing import Any, Dict, Optional
 
-class EvidentialResNetModule(L.LightningModule):
+class EvidentialModule(L.LightningModule):
     def __init__(
         self,
+        backbone: nn.Module = None,
         num_classes: int = 43,
         lr: float = 0.001,
         max_epochs: int = 50,
         annealing_epochs: int = 10,
         kl_penalty_weight: float = 0.2,
+        n_bins: int = 15,
+        name: Optional[str] = None,
+        **kwargs
     ):
-        """
-        PyTorch Lightning Module for Evidential Deep Learning.
-        """
         super().__init__()
-        self.save_hyperparameters()
+        # Senior best practice: ignore catch-all kwargs in hparams
+        self.save_hyperparameters(ignore=['kwargs', 'backbone'])
         
         # 1. Model & Loss
-        self.model = EvidentialNetwork(num_classes=num_classes)
+        self.model = EvidentialNetwork(backbone=backbone, num_classes=num_classes)
         self.criterion = EDLLoss(num_classes=num_classes, annealing_epochs=annealing_epochs, kl_penalty_weight=kl_penalty_weight)
         
         # 2. Performance Metrics
@@ -32,12 +39,21 @@ class EvidentialResNetModule(L.LightningModule):
         self.test_acc = MulticlassAccuracy(num_classes=num_classes)
         
         # ECE: To track if EDL improves calibration out-of-the-box
-        self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
-        self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
+        self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=n_bins)
+        self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=n_bins)
 
         # ASR: Advanced Severity Risk (Senior Level)
         self.val_asr = AdvancedSeverityRisk(num_classes=num_classes)
         self.test_asr = AdvancedSeverityRisk(num_classes=num_classes)
+
+        # Advanced Uncertainty Proxies
+        self.val_entropy = EntropyScore()
+        self.test_entropy = EntropyScore()
+
+        # Ph.D. Rigor: Advanced Calibration
+        self.test_aece = AdaptiveECE(n_bins=n_bins)
+        self.test_cece = ClasswiseECE(target_classes=[13, 14]) # Yield, Stop
+        self.test_brier = MulticlassBrierScore(num_classes=num_classes)
 
     def forward(self, x: torch.Tensor):
         return self.model(x)
@@ -80,6 +96,9 @@ class EvidentialResNetModule(L.LightningModule):
         acc(probs, y)
         ece(probs, y)
         
+        entropy = getattr(self, f"{prefix}_entropy")
+        entropy(probs)
+        
         # Update ASR (Evidential version passes vacuity to the metric)
         asr = getattr(self, f"{prefix}_asr")
         asr_results = asr(probs, y, vacuity=vacuity)
@@ -88,6 +107,7 @@ class EvidentialResNetModule(L.LightningModule):
         self.log(f"{prefix}/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/ece", ece, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/entropy", entropy, on_step=False, on_epoch=True)
         self.log(f"{prefix}/vacuity", torch.mean(vacuity), on_step=False, on_epoch=True, prog_bar=True)
         
         # Log Safety Metrics
@@ -99,6 +119,15 @@ class EvidentialResNetModule(L.LightningModule):
         for key, value in asr_results.items():
             if "esp_" in key:
                 self.log(f"{prefix}/{key.replace('asr/', '')}", value, on_step=False, on_epoch=True)
+
+        if prefix == "test":
+            self.test_aece(probs, y)
+            self.test_brier(probs, y)
+            cece_results = self.test_cece(probs, y)
+            self.log("test/aece", self.test_aece, on_step=False, on_epoch=True)
+            self.log("test/brier", self.test_brier, on_step=False, on_epoch=True)
+            for k, v in cece_results.items():
+                self.log(f"test/{k}", v, on_step=False, on_epoch=True)
         
         return loss
 

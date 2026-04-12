@@ -3,7 +3,12 @@ import torch.nn as nn
 import pytorch_lightning as L
 from torchvision.models import resnet18, ResNet18_Weights
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
-from src.metrics.custom_metrics import MulticlassBrierScore, SeverityWeightedError
+from src.metrics.custom_metrics import (
+    MulticlassBrierScore, 
+    SeverityWeightedError, 
+    AdaptiveECE, 
+    ClasswiseECE
+)
 from typing import Any, Dict, Optional
 
 class ResNetBaselineModule(L.LightningModule):
@@ -12,18 +17,16 @@ class ResNetBaselineModule(L.LightningModule):
         num_classes: int = 43,
         lr: float = 0.001,
         max_epochs: int = 50,
-        cost_config: Optional[Dict] = None,
+        n_bins: int = 15,
+        name: Optional[str] = None,
+        **kwargs
     ):
         """
         ResNet-18 baseline classifier for Trust Analysis.
-        
-        Args:
-            num_classes: Number of target classes (GTSRB = 43).
-            lr: Initial learning rate.
-            max_epochs: Total number of epochs for the CosineAnnealingLR scheduler.
         """
         super().__init__()
-        self.save_hyperparameters()
+        # Senior best practice: ignore catch-all kwargs in hparams
+        self.save_hyperparameters(ignore=['kwargs'])
 
         # Architecture: ResNet-18 with ImageNet weights
         self.backbone = resnet18(weights=ResNet18_Weights.DEFAULT)
@@ -41,17 +44,20 @@ class ResNetBaselineModule(L.LightningModule):
 
         # Trust Metrics (Only for Val and Test)
         # ECE: Expected Calibration Error quantified in 15 bins
-        self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
-        self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
+        self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=n_bins)
+        self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=n_bins)
 
         # Multiclass Brier Score: Proper scoring rule that penalizes both calibration and refinement
         self.val_brier = MulticlassBrierScore(num_classes=num_classes)
         self.test_brier = MulticlassBrierScore(num_classes=num_classes)
 
         # SWE: Severity-Weighted Error (Trust Analysis)
-        if cost_config:
-            self.val_swe = SeverityWeightedError(cost_config=cost_config, num_classes=num_classes)
-            self.test_swe = SeverityWeightedError(cost_config=cost_config, num_classes=num_classes)
+        self.val_swe = SeverityWeightedError(num_classes=num_classes)
+        self.test_swe = SeverityWeightedError(num_classes=num_classes)
+
+        # Ph.D. Rigor: Advanced Calibration
+        self.test_aece = AdaptiveECE(n_bins=n_bins)
+        self.test_cece = ClasswiseECE(target_classes=[13, 14]) # Yield, Stop
 
     def forward(self, x: torch.Tensor):
         return self.backbone(x)
@@ -92,8 +98,24 @@ class ResNetBaselineModule(L.LightningModule):
         
         if hasattr(self, f"{prefix}_swe"):
             swe = getattr(self, f"{prefix}_swe")
-            swe(preds, y)
-            self.log(f"{prefix}/swe", swe, on_step=False, on_epoch=True, prog_bar=True)
+            swe_results = swe(probs, y)
+            
+            # Log individual safety components
+            self.log(f"{prefix}/swe", swe_results["asr/swe"], on_step=False, on_epoch=True, prog_bar=True)
+            self.log(f"{prefix}/esp", swe_results["asr/esp"], on_step=False, on_epoch=True, prog_bar=True)
+            self.log(f"{prefix}/near_miss_rate", swe_results["asr/near_miss_rate"], on_step=False, on_epoch=True)
+
+            # Log Category Breakdown (Speed, Priority, etc.)
+            for key, value in swe_results.items():
+                if "esp_" in key:
+                    self.log(f"{prefix}/{key.replace('asr/', '')}", value, on_step=False, on_epoch=True)
+
+        if prefix == "test":
+            self.test_aece(probs, y)
+            cece_results = self.test_cece(probs, y)
+            self.log("test/aece", self.test_aece, on_step=False, on_epoch=True)
+            for k, v in cece_results.items():
+                self.log(f"test/{k}", v, on_step=False, on_epoch=True)
 
         # Logging with prefix (val/ or test/)
         self.log(f"{prefix}/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
