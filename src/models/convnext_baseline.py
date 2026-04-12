@@ -3,7 +3,7 @@ import torch.nn as nn
 import pytorch_lightning as L
 from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
-from src.metrics.custom_metrics import MulticlassBrierScore, SeverityWeightedError
+from src.metrics.custom_metrics import MulticlassBrierScore, AdvancedSeverityRisk
 from typing import Any, Dict, Optional
 
 class ConvNextBaselineModule(L.LightningModule):
@@ -51,10 +51,10 @@ class ConvNextBaselineModule(L.LightningModule):
         self.val_brier = MulticlassBrierScore(num_classes=num_classes)
         self.test_brier = MulticlassBrierScore(num_classes=num_classes)
 
-        # SWE: Severity-Weighted Error
-        if cost_config:
-            self.val_swe = SeverityWeightedError(cost_config=cost_config, num_classes=num_classes)
-            self.test_swe = SeverityWeightedError(cost_config=cost_config, num_classes=num_classes)
+        # ASR: Advanced Severity Risk
+        # We always instantiate this now as it's a senior requirement
+        self.val_asr = AdvancedSeverityRisk(num_classes=num_classes)
+        self.test_asr = AdvancedSeverityRisk(num_classes=num_classes)
 
     def forward(self, x: torch.Tensor):
         return self.backbone(x)
@@ -88,15 +88,21 @@ class ConvNextBaselineModule(L.LightningModule):
         ece(probs, y)
         brier(probs, y)
         
-        if hasattr(self, f"{prefix}_swe"):
-            swe = getattr(self, f"{prefix}_swe")
-            swe(preds, y)
-            self.log(f"{prefix}/swe", swe, on_step=False, on_epoch=True, prog_bar=True)
-
-        self.log(f"{prefix}/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
+        asr = getattr(self, f"{prefix}_asr")
+        asr_results = asr(probs, y)
+        
+        # Log Top-level Safety Metrics
         self.log(f"{prefix}/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/ece", ece, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/brier", brier, on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/swe", asr_results["asr/swe"], on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/esp", asr_results["asr/esp"], on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/near_miss_rate", asr_results["asr/near_miss_rate"], on_step=False, on_epoch=True)
+
+        # Log Category Breakdown (e.g., asr/esp_speed)
+        for key, value in asr_results.items():
+            if "esp_" in key:
+                self.log(f"{prefix}/{key.replace('asr/', '')}", value, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: Any, batch_idx: int):

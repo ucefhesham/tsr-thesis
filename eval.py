@@ -41,10 +41,10 @@ def evaluate(cfg: DictConfig):
     results_path = f"logs/{model_name}_stress_test_results.csv"
     
     # Initialize CSV with Header
-    # Added GFLOPs to help plot the Trust-Per-Efficiency (TPE) metric
+    # Added Advanced Severity metrics (SWE, ESP) for safety analysis
     with open(results_path, mode="w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Corruption", "Severity", "Calibration_Method", "Accuracy", "ECE", "GFLOPs"])
+        writer.writerow(["Corruption", "Severity", "Calibration_Method", "Accuracy", "ECE", "SWE", "ESP", "GFLOPs"])
 
     # Instantiate DataModule
     print(f"Instantiating datamodule <{cfg.datamodule._target_}>")
@@ -113,7 +113,12 @@ def evaluate(cfg: DictConfig):
         if results:
             with open(results_path, mode="a", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["clean", 0, mode_name, results[0]["test/acc"], results[0]["test/ece"], gflops])
+                writer.writerow([
+                    "clean", 0, mode_name, 
+                    results[0]["test/acc"], results[0]["test/ece"], 
+                    results[0]["test/swe"], results[0]["test/esp"], 
+                    gflops
+                ])
 
     print("\n--- Phase 2: Uncertainty Stress Sweep ---")
     # Stress sweep respects the datamodule configuration, but we disable 
@@ -158,9 +163,11 @@ def evaluate(cfg: DictConfig):
                 if results:
                     acc = results[0].get("test/acc", 0.0)
                     ece = results[0].get("test/ece", 0.0)
+                    swe = results[0].get("test/swe", 0.0)
+                    esp = results[0].get("test/esp", 0.0)
                     with open(results_path, mode="a", newline="") as f:
                         writer = csv.writer(f)
-                        writer.writerow([corruption, severity, mode_name, acc, ece, gflops])
+                        writer.writerow([corruption, severity, mode_name, acc, ece, swe, esp, gflops])
                 
                 # Cleanup to keep memory stable
                 del fresh_trainer

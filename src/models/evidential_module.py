@@ -4,6 +4,7 @@ import pytorch_lightning as L
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
 from src.models.evidential import EvidentialNetwork
 from src.losses.dirichlet_loss import EDLLoss
+from src.metrics.custom_metrics import AdvancedSeverityRisk
 from typing import Any, Dict, Optional
 
 class EvidentialResNetModule(L.LightningModule):
@@ -33,6 +34,10 @@ class EvidentialResNetModule(L.LightningModule):
         # ECE: To track if EDL improves calibration out-of-the-box
         self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
         self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
+
+        # ASR: Advanced Severity Risk (Senior Level)
+        self.val_asr = AdvancedSeverityRisk(num_classes=num_classes)
+        self.test_asr = AdvancedSeverityRisk(num_classes=num_classes)
 
     def forward(self, x: torch.Tensor):
         return self.model(x)
@@ -75,11 +80,25 @@ class EvidentialResNetModule(L.LightningModule):
         acc(probs, y)
         ece(probs, y)
         
+        # Update ASR (Evidential version passes vacuity to the metric)
+        asr = getattr(self, f"{prefix}_asr")
+        asr_results = asr(probs, y, vacuity=vacuity)
+        
         # Log accuracy, ECE, and critical Vacuity (Epistemic Uncertainty)
         self.log(f"{prefix}/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/ece", ece, on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/vacuity", torch.mean(vacuity), on_step=False, on_epoch=True, prog_bar=True)
+        
+        # Log Safety Metrics
+        self.log(f"{prefix}/swe", asr_results["asr/swe"], on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/esp", asr_results["asr/esp"], on_step=False, on_epoch=True, prog_bar=True)
+        self.log(f"{prefix}/near_miss_rate", asr_results["asr/near_miss_rate"], on_step=False, on_epoch=True)
+
+        # Log Category Breakdown
+        for key, value in asr_results.items():
+            if "esp_" in key:
+                self.log(f"{prefix}/{key.replace('asr/', '')}", value, on_step=False, on_epoch=True)
         
         return loss
 
