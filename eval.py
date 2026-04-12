@@ -33,7 +33,11 @@ def evaluate(cfg: DictConfig):
     
     # Ensure logs directory exists for result extraction
     os.makedirs("logs", exist_ok=True)
-    results_path = "logs/stress_test_results.csv"
+    
+    # Senior ML Engineer: Use dynamic naming based on the model module path 
+    # to avoid overwriting ResNet vs Evidential results.
+    model_name = "evidential" if "evidential" in cfg.model._target_.lower() else "resnet"
+    results_path = f"logs/{model_name}_stress_test_results.csv"
     
     # Initialize CSV with Header
     with open(results_path, mode="w", newline="") as f:

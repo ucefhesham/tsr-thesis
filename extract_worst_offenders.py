@@ -17,8 +17,12 @@ def denormalize(img):
 
 def main():
     # Setup paths
-    ckpt_path = "checkpoints/epoch_017.ckpt" # Verified existing checkpoint
-    save_path = "logs/worst_offenders.png"
+    # Senior ML Engineer: Use dynamic naming to distinguish between experiments.
+    ckpt_path = "checkpoints/best-trust-resnet.ckpt" 
+    save_path = "logs/resnet_worst_offenders.png"
+    
+    if "evidential" in ckpt_path:
+        save_path = "logs/evidential_worst_offenders.png"
     os.makedirs("logs", exist_ok=True)
 
     print(f"Loading model from {ckpt_path}...")
