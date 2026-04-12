@@ -1,4 +1,20 @@
+import sys
+import os
+
+# --- CRITICAL: Windows Environment Isolation ---
+# Prevent system-wide NumPy (often 2.x) from leaking into dataloader workers.
+# This must happen BEFORE any other imports to ensure strict isolation.
+os.environ["PYTHONNOUSERSITE"] = "1"
+venv_site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "Lib", "site-packages")
+if os.path.exists(venv_site):
+    if venv_site not in sys.path:
+        sys.path.insert(0, venv_site)
+    elif sys.path[0] != venv_site:
+        sys.path.remove(venv_site)
+        sys.path.insert(0, venv_site)
+
 import hydra
+
 from omegaconf import DictConfig
 import pytorch_lightning as L
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -25,10 +41,22 @@ def train(cfg: DictConfig):
     # CRITICAL: Strict Reproducibility
     L.seed_everything(42, workers=True)
 
-    # SECURE: Allowlist Hydra/OmegaConf for PyTorch 2.6+ weights_only loading
-    from omegaconf.listconfig import ListConfig
-    from omegaconf.base import ContainerMetadata
-    torch.serialization.add_safe_globals([DictConfig, ListConfig, ContainerMetadata])
+    # SECURE: Windows-specific memory commitment check
+    # Helps diagnose "paging file too small" errors during worker spawning
+    if os.name == 'nt':
+        try:
+            import subprocess
+            cmd = "Get-CimInstance Win32_OperatingSystem | Select-Object FreeVirtualMemory, TotalVirtualMemorySize"
+            output = subprocess.check_output(["powershell", "-Command", cmd], text=True)
+            print(f"\n--- System Environment Check ---")
+            print(output.strip())
+            print("Note: If 'FreeVirtualMemory' is low, consider reducing num_workers or increasing Paging File.\n")
+        except Exception:
+            pass
+
+    # SECURE: Allowlist Hydra/OmegaConf for older PyTorch versions where needed
+    # (Note: add_safe_globals is only available in torch 2.4+, skipping for 2.0.1)
+    pass
 
     # Instantiate Loggers from configuration
     logger: List[L.loggers.Logger] = []
@@ -40,18 +68,22 @@ def train(cfg: DictConfig):
     # Instantiate Callbacks (ModelCheckpoint, EarlyStopping, etc.)
     callbacks: List[L.Callback] = []
     if "callbacks" in cfg:
-        for _, cb_conf in cfg.callbacks.items():
+        for name, cb_conf in cfg.callbacks.items():
+            if name == "model_checkpoint":
+                continue
             print(f"Instantiating callback <{cb_conf._target_}>")
             callbacks.append(hydra.utils.instantiate(cb_conf))
 
     # Senior ML Engineer: Explicit Trust-Specific Checkpointing
     # Bypassing cfg to ensure strict adherence to optimal weight storage
+    model_name = "evidential" if "evidential" in cfg.model._target_.lower() else "baseline"
     checkpoint_callback = ModelCheckpoint(
-        monitor='val/ece', 
-        mode='min', 
+        monitor='val/acc', 
+        mode='max', 
         save_top_k=1, 
         dirpath='checkpoints/', 
-        filename='best-trust-baseline'
+        filename=f'best-trust-{model_name}',
+        save_last=True
     )
     # Insert at index 0 so trainer.test(ckpt_path="best") prioritizes this monitor
     callbacks.insert(0, checkpoint_callback)
@@ -87,7 +119,7 @@ def train(cfg: DictConfig):
     print("\n--- Phase 2: Evaluation Lifecycle ---")
     # --- Phase 5: Test ---
     # Loading 'best' weights from Trust-optimized checkpoint for final report
-    trainer.test(model, datamodule=datamodule, ckpt_path="best", weights_only=False)
+    trainer.test(model, datamodule=datamodule, ckpt_path="best")
 
 if __name__ == "__main__":
     train()

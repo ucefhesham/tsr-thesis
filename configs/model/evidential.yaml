@@ -1,0 +1,7 @@
+_target_: src.models.evidential_module.EvidentialResNetModule
+
+num_classes: 43
+lr: 0.0005
+max_epochs: 100
+annealing_epochs: 30
+kl_penalty_weight: 0.2

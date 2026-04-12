@@ -15,7 +15,7 @@ class GTSRBDataModule(L.LightningDataModule):
         self,
         data_dir: str = "data/",
         batch_size: int = 32,
-        num_workers: int = 4,
+        num_workers: int = 2,
         pin_memory: bool = True,
         input_size: int = 224,
     ):
@@ -85,6 +85,24 @@ class GTSRBDataModule(L.LightningDataModule):
             if zip_path.exists():
                 os.remove(zip_path)
             
+        # Manual repair for test images if torchvision fails
+        test_images_path = Path(self.hparams.data_dir) / "gtsrb" / "GTSRB" / "Final_Test" / "Images"
+        if not test_images_path.exists() or len(list(test_images_path.glob("*.ppm"))) < 12630:
+            print(f"Test images incomplete or missing. Attempting manual repair...")
+            url = "https://sid.erda.dk/public/archives/daaeac0d7ce1152aea9b61d9f1e19370/GTSRB_Final_Test_Images.zip"
+            zip_path = Path(self.hparams.data_dir) / "GTSRB_Final_Test_Images.zip"
+            
+            # Download
+            urllib.request.urlretrieve(url, zip_path)
+            
+            # Extract
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(self.hparams.data_dir)
+            
+            # Cleanup
+            if zip_path.exists():
+                os.remove(zip_path)
+
         # Final validation call
         GTSRB(self.hparams.data_dir, split="test", download=True)
 

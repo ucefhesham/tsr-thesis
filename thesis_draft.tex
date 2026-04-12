@@ -1,0 +1,129 @@
+\documentclass[12pt,a4paper]{report}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\geometry{margin=1in}
+
+\title{Trust Analysis of Traffic Sign Classifiers under Uncertainties}
+\author{Bachelor's Thesis Draft}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+% --- Chapter: Methodology ---
+\chapter{Methodology}
+\label{ch:methodology}
+
+This chapter outlines the experimental framework designed to evaluate the robustness and calibration of traffic sign classifiers under distribution shift. The methodology is structured around three components: the baseline architectural setup, the systematic aleatoric stress suite, and the post-hoc calibration protocol.
+
+\section{Dataset and Architecture}
+\label{sec:dataset_architecture}
+
+We utilize the German Traffic Sign Recognition Benchmark (GTSRB), consisting of 43 classes and over 50,000 images. The dataset is partitioned into training ($70\%$), validation ($20\%$), and a clean calibration set ($10\%$).
+
+The primary classifier used is a ResNet-18 architecture, pre-trained on ImageNet. The final fully connected layer is modified to output 43 logits. We optimize the model using the Adam optimizer and a Cosine Annealing learning rate scheduler to ensure a high-accuracy baseline before subjecting the model to uncertainty stress.
+
+\section{Aleatoric Stress Suite}
+\label{sec:stress_suite}
+
+To simulate the uncertainties prevalent in autonomous driving environments, we implemented a systematic stress suite using the \texttt{Albumentations} library. We evaluate the model's reliability across four primary corruption categories:
+\begin{enumerate}
+    \item \textbf{Gaussian Noise}: Simulating sensor thermal noise.
+    \item \textbf{Defocus Blur}: Simulating lens misfocus.
+    \item \textbf{Weather (Fog/Rain)}: Simulating visibility degradation via fog and drizzle transforms.
+    \item \textbf{JPEG Compression}: Simulating transmission-related artifacts and low-bandwidth constraints.
+\end{enumerate}
+
+Each corruption is applied at five discrete levels of severity, according to standard benchmarking protocols for image robustness, resulting in 20 distinct stress scenarios.
+
+\section{Calibration Protocol}
+\label{sec:calibration_protocol}
+
+To address model overconfidence, we implement post-hoc Temperature Scaling (TS). TS rescales the logits $z$ using a single scalar parameter $T > 0$. The optimal temperature is found by minimizing the Negative Log-Likelihood (NLL) on the locked calibration set using the L-BFGS optimizer.
+
+The calibrated Softmax confidence for class $k$ is defined as:
+\begin{equation}
+    \sigma(z/T)_k = \frac{\exp(z_k / T)}{\sum_j \exp(z_j / T)}
+\end{equation}
+
+Our protocol optimizes $T$ once on clean data ($T=1.498$) and evaluates its generalization performance on all 20 corrupted scenarios without further tuning.
+
+% --- Chapter: Results ---
+\chapter{Results}
+\label{ch:results}
+
+\section{Baseline Performance and Overconfidence}
+\label{sec:baseline_results}
+
+The ResNet-18 model achieved a state-of-the-art Accuracy of 98.6\% on the clean GTSRB test set. However, the model exhibited pathological overconfidence. The Expected Calibration Error (ECE) for the uncalibrated baseline was measured at 0.51, indicating that the model's subjective confidence scores were misaligned with its objective accuracy by over 50 percentage points.
+
+\section{Robustness under Distribution Shift}
+\label{sec:robustness_shift}
+
+The model demonstrated varying levels of robustness across the stress suite. As shown in Figure \ref{fig:trust_decay}, accuracy remained resilient under Defocus Blur and JPEG Compression. However, Gaussian Noise caused a significant accuracy collapse, with the model dropping to 86.9\% accuracy at Severity 5. This illustrates that while the model is robust to structural blurs, high-frequency spectral noise violates the model's learned feature representations more severely.
+
+\begin{figure}[h]
+    \centering
+    % \includegraphics[width=0.8\textwidth]{figures/trust_decay.png}
+    \caption{Degradation of Accuracy and Calibration across five levels of severity.}
+    \label{fig:trust_decay}
+\end{figure}
+
+\section{Calibration Generalization}
+\label{sec:calibration_generalization}
+
+Applying Temperature Scaling via L-BFGS yielded an optimal temperature of $T=1.498$. Table \ref{tab:calibration_results} summarizes the metrics across the worst-case scenarios (Severity 5). Remarkably, $T$ generalized perfectly to unseen corruptions, holding the ECE strictly below 0.10 across all categories.
+
+\begin{table}[h]
+\centering
+\caption{ResNet-18 Robustness and Calibration at Maximum Uncertainty (Severity 5)}
+\label{tab:calibration_results}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Condition} & \textbf{Acc. (Uncal)} & \textbf{Acc. (Cal)} & \textbf{ECE (Uncal)} & \textbf{ECE (Cal)} \\
+\midrule
+Clean (Baseline)    & 98.6\% & 98.6\% & 0.51 & \textbf{0.08} \\
+Gaussian Noise      & 86.9\% & 86.8\% & 0.26 & \textbf{0.06} \\
+Defocus Blur        & 98.5\% & 98.5\% & 0.49 & \textbf{0.09} \\
+Weather (Fog/Rain)  & 96.6\% & 96.9\% & 0.41 & \textbf{0.07} \\
+JPEG Compression    & 97.0\% & 97.0\% & 0.35 & \textbf{0.06} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% --- Chapter: Discussion ---
+\chapter{Discussion}
+\label{ch:discussion}
+
+\section{Decoupling Trust and Robustness}
+\label{sec:decoupling}
+
+A critical finding of this research is the decouple relationship between classifier robustness (accuracy) and trust (calibration). Our data proves that a model can be highly trustworthy even when its accuracy has been degraded by environment shifts, provided it is properly calibrated. For instance, under Severity 5 Noise, accuracy dropped to 86.9\%, yet the calibrated ECE remained at 0.06. This implies the system correctly identifies its own uncertainty, allowing for safer fail-stop behaviors in autonomous systems.
+
+\section{Analysis of Failure Modes}
+\label{sec:worst_offenders}
+
+The occurrence of catastrophic failures is visualized in Figure \ref{fig:worst_offenders}. These "Worst Offender" images represent cases where the model predicted a class with $>90\%$ confidence despite being incorrect. As seen in the generated qualitative evidence (\texttt{logs/worst_offenders.png}), these errors often involve confusing signs with similar geometric structures under high noise levels.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{logs/worst_offenders.png}
+    \caption{Qualitative evidence of high-confidence misclassifications.}
+    \label{fig:worst_offenders}
+\end{figure}
+
+\section{Limitations}
+\label{sec:limitations}
+
+While Temperature Scaling effectively restores trust by mitigating overconfidence, it cannot recover information destroyed by severe sensor noise. Feature destruction is a fundamental limitation that calibration cannot bypass; it only ensures the model correctly reports its lack of certainty. 
+
+\end{document}

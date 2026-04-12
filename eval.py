@@ -28,7 +28,8 @@ def evaluate(cfg: DictConfig):
     # SECURE: Allowlist Hydra/OmegaConf for PyTorch 2.6+ loading
     from omegaconf.listconfig import ListConfig
     from omegaconf.base import ContainerMetadata
-    torch.serialization.add_safe_globals([DictConfig, ListConfig, ContainerMetadata])
+    if hasattr(torch.serialization, "add_safe_globals"):
+        torch.serialization.add_safe_globals([DictConfig, ListConfig, ContainerMetadata])
     
     # Ensure logs directory exists for result extraction
     os.makedirs("logs", exist_ok=True)
@@ -65,7 +66,7 @@ def evaluate(cfg: DictConfig):
         devices="auto",
         precision="16-mixed",
         logger=False, 
-        callbacks=[RichProgressBar(refresh_rate=1)],
+        callbacks=[], # Disabled RichProgressBar to fix IndexError on older Lightning versions
     )
 
     print("\n--- Phase 0: Post-Hoc Calibration ---")
@@ -136,7 +137,7 @@ def evaluate(cfg: DictConfig):
                     devices="auto",
                     precision="16-mixed",
                     logger=False,
-                    callbacks=[RichProgressBar(refresh_rate=1)],
+                    callbacks=[], # Disabled RichProgressBar to fix IndexError on older Lightning versions
                 )
                 
                 # 4. Run evaluation with ALREADY LOADED weights
