@@ -138,6 +138,102 @@ class MulticlassBrierScore(Metric):
     def compute(self):
         return self.sum_squared_error / self.total
 
+class NegativeLogLikelihood(Metric):
+    """
+    Standard Negative Log-Likelihood (NLL) for classification.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("sum_nll", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, targets: torch.Tensor):
+        """
+        Args:
+            preds: Predicted probabilities (softmax) [N, K]
+            targets: Ground truth labels [N]
+        """
+        # Cross entropy on probabilities is -log(p_target)
+        nll = F.nll_loss(torch.log(preds + 1e-10), targets, reduction="sum")
+        self.sum_nll += nll
+        self.total += targets.size(0)
+
+    def compute(self):
+        return self.sum_nll / self.total
+
+class ReliabilityDiagram:
+    """
+    Utility for generating Calibration Reliability Diagrams.
+    """
+    @staticmethod
+    def calculate_bins(preds: torch.Tensor, targets: torch.Tensor, n_bins: int = 15):
+        confidences, predictions = torch.max(preds, dim=1)
+        accuracies = (predictions == targets).float()
+        
+        bin_boundaries = torch.linspace(0, 1, n_bins + 1)
+        bin_lowers = bin_boundaries[:-1]
+        bin_uppers = bin_boundaries[1:]
+        
+        bin_accs = []
+        bin_confs = []
+        bin_sizes = []
+        
+        for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+            mask = (confidences > bin_lower) & (confidences <= bin_upper)
+            if mask.any():
+                bin_accs.append(accuracies[mask].mean().item())
+                bin_confs.append(confidences[mask].mean().item())
+                bin_sizes.append(mask.float().mean().item())
+            else:
+                bin_accs.append(0.0)
+                bin_confs.append(0.0)
+                bin_sizes.append(0.0)
+                
+        return {
+            "bin_accs": bin_accs,
+            "bin_confs": bin_confs,
+            "bin_sizes": bin_sizes,
+            "bin_boundaries": bin_boundaries.tolist()
+        }
+
+class NegativeLogLikelihood(Metric):
+    """
+    Standard Negative Log-Likelihood (NLL) for classification.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("sum_nll", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, targets: torch.Tensor):
+        # Cross entropy on probabilities is -log(p_target)
+        nll = F.nll_loss(torch.log(preds + 1e-10), targets, reduction="sum")
+        self.sum_nll += nll
+        self.total += targets.size(0)
+
+    def compute(self):
+        return self.sum_nll / self.total
+
+class ReliabilityDiagram:
+    """Utility for generating Calibration Reliability Diagrams."""
+    @staticmethod
+    def calculate_bins(preds: torch.Tensor, targets: torch.Tensor, n_bins: int = 15):
+        confidences, predictions = torch.max(preds, dim=1)
+        accuracies = (predictions == targets).float()
+        bin_boundaries = torch.linspace(0, 1, n_bins + 1)
+        bin_lowers, bin_uppers = bin_boundaries[:-1], bin_boundaries[1:]
+        
+        bin_accs, bin_confs, bin_sizes = [], [], []
+        for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+            mask = (confidences > bin_lower) & (confidences <= bin_upper)
+            if mask.any():
+                bin_accs.append(accuracies[mask].mean().item())
+                bin_confs.append(confidences[mask].mean().item())
+                bin_sizes.append(mask.float().mean().item())
+            else:
+                bin_accs.append(0.0); bin_confs.append(0.0); bin_sizes.append(0.0)
+        return {"bin_accs": bin_accs, "bin_confs": bin_confs, "bin_sizes": bin_sizes}
+
 class AdvancedSeverityRisk(Metric):
     def __init__(self, num_classes: int = 43, near_miss_threshold: float = 0.15, **kwargs):
         """

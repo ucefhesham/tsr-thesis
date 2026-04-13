@@ -3,7 +3,8 @@ import torch.nn as nn
 import pytorch_lightning as L
 from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
 from torchmetrics.classification import MulticlassAccuracy, CalibrationError
-from src.metrics.custom_metrics import MulticlassBrierScore, AdvancedSeverityRisk, EntropyScore, EnergyScore
+from src.metrics.custom_metrics import MulticlassBrierScore
+from src.metrics.custom_metrics import AdvancedSeverityRisk, EntropyScore, EnergyScore
 from typing import Any, Dict, Optional
 
 class ConvNextBaselineModule(L.LightningModule):
@@ -20,14 +21,11 @@ class ConvNextBaselineModule(L.LightningModule):
         ConvNeXt-Tiny baseline classifier for Trust Analysis.
         """
         super().__init__()
-        # Senior best practice: ignore catch-all kwargs in hparams
         self.save_hyperparameters(ignore=['kwargs'])
 
         # Architecture: ConvNeXt-Tiny with ImageNet weights
         self.backbone = convnext_tiny(weights=ConvNeXt_Tiny_Weights.DEFAULT)
         
-        # Modify the classifier head for GTSRB (43 classes)
-        # ConvNeXt head is typically: (head): Sequential( (0): LayerNorm..., (1): Flatten, (2): Linear )
         in_features = self.backbone.classifier[2].in_features
         self.backbone.classifier[2] = nn.Linear(in_features, num_classes)
 
@@ -40,14 +38,22 @@ class ConvNextBaselineModule(L.LightningModule):
         self.test_acc = MulticlassAccuracy(num_classes=num_classes)
 
         # Trust Metrics
-        self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
-        self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
+        try:
+            self.val_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
+            self.test_ece = CalibrationError(task="multiclass", num_classes=num_classes, n_bins=15)
+        except:
+            # Older torchmetrics fallback (no task arg)
+            self.val_ece = CalibrationError(num_classes=num_classes, n_bins=15)
+            self.test_ece = CalibrationError(num_classes=num_classes, n_bins=15)
 
-        self.val_brier = MulticlassBrierScore(num_classes=num_classes)
-        self.test_brier = MulticlassBrierScore(num_classes=num_classes)
+        try:
+            self.val_brier = MulticlassBrierScore(num_classes=num_classes)
+            self.test_brier = MulticlassBrierScore(num_classes=num_classes)
+        except:
+            self.val_brier = MulticlassBrierScore()
+            self.test_brier = MulticlassBrierScore()
 
         # ASR: Advanced Severity Risk
-        # We always instantiate this now as it's a senior requirement
         self.val_asr = AdvancedSeverityRisk(num_classes=num_classes)
         self.test_asr = AdvancedSeverityRisk(num_classes=num_classes)
 
@@ -107,7 +113,7 @@ class ConvNextBaselineModule(L.LightningModule):
         self.log(f"{prefix}/esp", asr_results["asr/esp"], on_step=False, on_epoch=True, prog_bar=True)
         self.log(f"{prefix}/near_miss_rate", asr_results["asr/near_miss_rate"], on_step=False, on_epoch=True)
 
-        # Log Category Breakdown (e.g., asr/esp_speed)
+        # Log Category Breakdown
         for key, value in asr_results.items():
             if "esp_" in key:
                 self.log(f"{prefix}/{key.replace('asr/', '')}", value, on_step=False, on_epoch=True)

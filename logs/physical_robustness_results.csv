@@ -1,0 +1,9 @@
+Sticker_Prob,Calibration_Method,Accuracy,Vacuity,Detection_Recall
+0.5,None,0.9352064728736877,0.0,0.0
+0.5,Temperature_Scaling,0.9373921751976013,0.0,0.0
+0.5,Isotonic_Calibration,0.9361785650253296,0.0,0.0
+0.5,Safe_Policy_Fallback,0.938774824142456,0.0,0.0
+1.0,None,0.9072606563568115,0.0,0.0
+1.0,Temperature_Scaling,0.8976830244064331,0.0,0.0
+1.0,Isotonic_Calibration,0.8997200131416321,0.0,0.0
+1.0,Safe_Policy_Fallback,0.9076405763626099,0.0,0.0

@@ -60,53 +60,36 @@ class StickerTransform:
         
         return Image.fromarray(img_arr)
 
+class DetectionJitterTransform:
+    """
+    Simulates detection window jitter/misalignment.
+    Used for 'Upstream Noise' stress cases.
+    """
     def __init__(self, translation_limit: float = 0.15, scale_limit: float = 0.15):
-        """
-        Args:
-            translation_limit: Max offset as fraction of image size.
-            scale_limit: Max scaling factor.
-        """
         self.translation_limit = translation_limit
         self.scale_limit = scale_limit
 
     def get_params(self, w: int, h: int) -> Tuple[float, float, float]:
-        """Returns random jitter parameters (tx, ty, s)"""
         tx = random.uniform(-self.translation_limit, self.translation_limit) * w
         ty = random.uniform(-self.translation_limit, self.translation_limit) * h
         s = random.uniform(1.0 - self.scale_limit, 1.0 + self.scale_limit)
         return tx, ty, s
 
     def apply_to_bbox(self, bbox: Tuple[int, int, int, int], tx: float, ty: float, s: float, w: int, h: int) -> Tuple[int, int, int, int]:
-        """
-        Transforms a bounding box (x1, y1, x2, y2) based on jitter parameters.
-        Parameters must match those used in the image transform.
-        """
         cx, cy = w / 2, h / 2
         x1, y1, x2, y2 = bbox
-        
-        # 1. Scaling around center
         x1, x2 = (x1 - cx) * s + cx, (x2 - cx) * s + cx
         y1, y2 = (y1 - cy) * s + cy, (y2 - cy) * s + cy
-        
-        # 2. Translation
-        # Note: In PIL, +tx shifts image R, which means sign moves R.
         x1, x2 = x1 + tx, x2 + tx
         y1, y2 = y1 + ty, y2 + ty
-        
         return (int(x1), int(y1), int(x2), int(y2))
 
     def __call__(self, img: Image.Image) -> Image.Image:
         w, h = img.size
         tx, ty, s = self.get_params(w, h)
-        
         cx, cy = w / 2, h / 2
-        a = 1.0 / s
-        b = 0
-        c = cx - (cx + tx) / s
-        d = 0
-        e = 1.0 / s
-        f = cy - (cy + ty) / s
-        
+        a, b, c = 1.0 / s, 0, cx - (cx + tx) / s
+        d, e, f = 0, 1.0 / s, cy - (cy + ty) / s
         return img.transform((w, h), Image.AFFINE, (a, b, c, d, e, f), resample=Image.BICUBIC)
 
 class UpstreamNoiseDataModule(GTSRBDataModule):

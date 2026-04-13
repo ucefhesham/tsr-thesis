@@ -24,6 +24,7 @@ def calculate_focus_score(grayscale_cam: np.ndarray, bbox: Tuple[int, int, int, 
     
     focus_energy = grayscale_cam[y1:y2, x1:x2].sum()
     return float(focus_energy / total_energy)
+class UncertaintyTarget:
     """
     Custom Grad-CAM target for Uncertainty.
     Visualizes regions that contribute most to the uncertainty score (Vacuity or Entropy).
@@ -32,17 +33,25 @@ def calculate_focus_score(grayscale_cam: np.ndarray, bbox: Tuple[int, int, int, 
         self.mode = mode
 
     def __call__(self, model_output):
+        # Handle dictionary vs raw tensor (Evidential Module forward returns raw alpha)
         if isinstance(model_output, dict):
-            # Evidential Output
-            if self.mode == "vacuity":
-                # Saliency w.r.t total evidence (we want to see what contributes to high/low vacuity)
-                # Since Vacuity = K/S, maximizing S minimizes Vacuity.
-                # To highlight regions causing uncertainty, we might want to visualize regions 
-                # that the model is struggling to gather evidence from.
+            if self.mode == "vacuity" and "vacuity" in model_output:
                 return model_output["vacuity"].squeeze()
-            return model_output["prob"].max(dim=1)[0] # Fallback
+            model_output = model_output.get("prob") or model_output.get("alpha")
+            
+        # Ensure 2D for consistent indexing [batch, classes]
+        if model_output.ndim == 1:
+            model_output = model_output.unsqueeze(0)
+            
+        if self.mode == "vacuity":
+            # Dirichlet Uncertainty Saliency: Vacuity = K / S
+            # Regions that increase total evidence (S) decrease vacuity.
+            # We visualize the inverse to see what *reduces* uncertainty.
+            K = model_output.shape[-1]
+            S = torch.sum(model_output, dim=1)
+            return K / (S + 1e-9)
         else:
-            # Baseline Output (Logits)
+            # Baseline Entropy Saliency
             probs = torch.softmax(model_output, dim=1)
             entropy = -torch.sum(probs * torch.log(probs + 1e-9), dim=1)
             return entropy
@@ -67,9 +76,12 @@ class TrustInterpreter:
         1. Class Saliency (Why this class?)
         2. Uncertainty Saliency (Why so confused?)
         """
-        # Ensure input has batch dimension
+        # Ensure input has batch dimension and gradient tracking
         if len(input_tensor.shape) == 3:
             input_tensor = input_tensor.unsqueeze(0)
+        
+        # MANDATORY for Grad-CAM backward pass
+        input_tensor.requires_grad = True
             
         # 1. Class Saliency Map
         if target_class is None:

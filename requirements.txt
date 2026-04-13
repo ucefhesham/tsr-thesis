@@ -12,3 +12,8 @@ pandas
 scikit-learn
 optuna
 pyrootutils
+rich
+fvcore
+grad-cam
+ultralytics
+scipy

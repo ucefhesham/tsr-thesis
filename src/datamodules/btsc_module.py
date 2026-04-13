@@ -131,13 +131,17 @@ class BTSCDataModule(L.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         extract_dir = os.path.join(self.hparams.data_dir, "Testing")
         if os.path.exists(extract_dir):
-            self.dataset = MappedImageFolder(extract_dir, transform=self.eval_transforms)
+            try:
+                self.dataset = MappedImageFolder(extract_dir, transform=self.eval_transforms)
+                print(f"✅ BTSC Dataset loaded with {len(self.dataset)} mapped samples.")
+            except Exception as e:
+                print(f"[WARNING] BTSC Loading failed: {e}. Skipping domain shift evaluation.")
+                self.dataset = None
         else:
             self.dataset = None
 
     def test_dataloader(self):
-        if self.dataset is None:
-            print("[WARNING] BTSC Dataset not found or failed to load. Skipping BTSC eval.")
+        if self.dataset is None or len(self.dataset) == 0:
             return None
             
         return DataLoader(

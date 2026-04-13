@@ -1,0 +1,14 @@
+Phase,Metric,Mode,Value
+Adversarial,FGSM_eps_0.1,None,0.5
+Adversarial,FGSM_eps_0.1,Temperature_Scaling,0.5
+Adversarial,FGSM_eps_0.1,Isotonic_Calibration,0.5
+Adversarial,FGSM_eps_0.1,Safe_Policy_Fallback,0.5
+Adversarial,FGSM_eps_0.1,None,0.484375
+Adversarial,FGSM_eps_0.1,Temperature_Scaling,0.484375
+Adversarial,FGSM_eps_0.1,Isotonic_Calibration,0.484375
+Adversarial,FGSM_eps_0.1,Safe_Policy_Fallback,0.484375
+Adversarial,FGSM_eps_0.2,None,0.265625
+Adversarial,FGSM_eps_0.2,Temperature_Scaling,0.265625
+Adversarial,FGSM_eps_0.2,Isotonic_Calibration,0.265625
+Adversarial,FGSM_eps_0.2,Safe_Policy_Fallback,0.265625
+[TRUNCATED_FROM_CLOUD]

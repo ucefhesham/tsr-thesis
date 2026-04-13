@@ -26,7 +26,14 @@ wandb/
 venv/
 ENV/
 
-# IDEs and OS
+data/
+outputs/
+logs/
+
+# Weights & Biases
+wandb/
+
+# IDEs
 .vscode/
 .idea/
 .DS_Store
